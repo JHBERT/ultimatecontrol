@@ -1,0 +1,9 @@
+{
+  "domain": "ultimatecontrol",
+  "name": "UltimateControl C64",
+  "version": "0.0.1",
+  "documentation": "https://github.com/JHBERT/ultimatecontrol",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": []
+}
