@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.9.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.0.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -742,6 +742,7 @@ class UltimateControlPanel extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot) return;
+    this._rememberScroll();
     const view = this._view;
     const cur = this._current || {};
     const rows = this._entries
@@ -774,7 +775,11 @@ class UltimateControlPanel extends HTMLElement {
           }
           tuneRows = `<div class="tunes">${html}</div>`;
         }
-        return `<div class="row file ${this._playing === key ? "busy" : ""}"
+        // Läuft dieser Tune (von Hand gestartet oder aus der Warteschlange)?
+        const isCurrent = cur.source === view.source && cur.path === key;
+        return `<div class="row file ${this._playing === key ? "busy" : ""} ${
+          isCurrent ? "current" : ""
+        }"
                      data-play="${this._esc(entry.name)}">
             <span class="icon">${open ? "▾" : "♪"}</span>
             <span class="name">${this._esc(entry.name)}</span>
@@ -856,7 +861,9 @@ class UltimateControlPanel extends HTMLElement {
           ${
             list
               ? `<div class="path"><b>${this._esc(list.name)}</b> · ${items.length} Tune(s)</div>
-                 <div class="list">${rows || `<div class="hint">Diese Playlist ist leer.</div>`}</div>
+                 <div class="list" id="list">${
+                   rows || `<div class="hint">Diese Playlist ist leer.</div>`
+                 }</div>
                  <div class="actions">
                    <button class="primary" id="plPlay" ${
                      items.length && !this._playlistBusy ? "" : "disabled"
@@ -894,6 +901,7 @@ class UltimateControlPanel extends HTMLElement {
       if (shuffle) shuffle.addEventListener("click", () => this._playPlaylist(true));
       const del = root.querySelector("#plDelete");
       if (del) del.addEventListener("click", () => this._playlistDelete());
+      this._restoreScroll(false);
       return;
     }
 
@@ -940,7 +948,7 @@ class UltimateControlPanel extends HTMLElement {
             ${imp.parent !== null ? `<button class="up">↑</button>` : ""}
             <span>${this._esc(imp.path || "Ordner auf dem Home-Assistant-Rechner")}</span>
           </div>
-          <div class="list">${rows || `<div class="hint">Keine Unterordner.</div>`}</div>
+          <div class="list" id="list">${rows || `<div class="hint">Keine Unterordner.</div>`}</div>
           ${count}
           <div class="actions">
             <button class="primary" id="impRun" ${imp.path && !imp.busy ? "" : "disabled"}>
@@ -1014,6 +1022,8 @@ class UltimateControlPanel extends HTMLElement {
                  background:rgba(127,127,127,.22); }
         .len { font-size:.75rem; color: var(--secondary-text-color,#999); }
         .row.busy { opacity:.5; }
+        .row.file.current { background: rgba(76,175,80,.16); }
+        .row.file.current .icon { color: var(--success-color,#4caf50); }
         .tunes { display:flex; flex-wrap:wrap; gap:4px; padding:2px 4px 8px 26px; }
         .tunes .tune { font:inherit; font-size:.78rem; padding:3px 8px; border-radius:12px;
                        border:1px solid var(--divider-color,#444); background:transparent;
@@ -1083,7 +1093,7 @@ class UltimateControlPanel extends HTMLElement {
           } title="Alle SIDs dieses Ordners nacheinander spielen">▶ Ordner abspielen</button>
           <button id="playShuffle" ${this._folderBusy ? "disabled" : ""} title="Zufällige Reihenfolge">🔀</button>
         </div>
-        <div class="list">
+        <div class="list" id="list">
           ${rows || `<div class="empty">Keine SID-Dateien hier.</div>`}
         </div>
         ${this._queueBar()}
@@ -1125,6 +1135,8 @@ class UltimateControlPanel extends HTMLElement {
     if (hvscCheck) hvscCheck.addEventListener("click", () => this._hvscStatus(true));
     const unfav = root.querySelector("#unfav");
     if (unfav) unfav.addEventListener("click", () => this._unfavorite());
+    // Position halten: nach einem Klick auf einen Tune nicht nach oben springen.
+    this._restoreScroll(false);
     const imp = root.querySelector("[data-import]");
     if (imp) imp.addEventListener("click", () => this._openImport());
     const topl = root.querySelector("#topl");
@@ -1151,6 +1163,27 @@ class UltimateControlPanel extends HTMLElement {
     if (qPause) qPause.addEventListener("click", () => this._queueAction("pause"));
     const qPlay = root.querySelector("#qPlay");
     if (qPlay) qPlay.addEventListener("click", () => this._queueAction("resume"));
+  }
+
+  /* Scrollposition der Liste sichern - ein neues innerHTML setzt sie sonst
+     * auf 0, und die Ansicht springt nach jedem Klick nach oben. */
+  _rememberScroll() {
+    const list = this.shadowRoot && this.shadowRoot.querySelector("#list");
+    if (list) this._scroll = list.scrollTop;
+  }
+
+  /* Nach dem Neuaufbau: alte Position wiederherstellen oder den gerade
+   * gespielten Tune in den Blick holen. */
+  _restoreScroll(keepTune) {
+    const list = this.shadowRoot && this.shadowRoot.querySelector("#list");
+    if (!list) return;
+    const focus = keepTune ? list.querySelector(".row.file.current") : null;
+    if (focus) {
+      // Der laufende Tune bleibt sichtbar, auch wenn die Liste länger ist.
+      focus.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    list.scrollTop = this._scroll || 0;
   }
 
   _esc(value) {
