@@ -32,6 +32,8 @@ from .api import (
     UltimateConnectionError,
 )
 from .const import (
+    DEFAULT_FAVORITES_FOLDER,
+    CONF_FAVORITES_FOLDER,
     CONF_HOST,
     CONF_NAME,
     CONF_PASSWORD,
@@ -71,6 +73,9 @@ OPTIONS_SCHEMA = vol.Schema(
         ),
         vol.Optional(CONF_PASSWORD): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
+        ),
+        vol.Optional(CONF_FAVORITES_FOLDER): TextSelector(
+            TextSelectorConfig(type=TextSelectorType.TEXT)
         ),
     }
 )
@@ -214,7 +219,12 @@ class UltimateControlOptionsFlow(OptionsFlow):
                         data={**entry.data, CONF_PASSWORD: new_password or None},
                     )
                 return self.async_create_entry(
-                    data={CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL]}
+                    data={
+                        CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
+                        CONF_FAVORITES_FOLDER: (
+                            user_input.get(CONF_FAVORITES_FOLDER) or ""
+                        ).strip(),
+                    }
                 )
 
         current = {
@@ -239,6 +249,10 @@ class UltimateControlOptionsFlow(OptionsFlow):
                 vol.Optional(CONF_PASSWORD): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.PASSWORD)
                 ),
+                vol.Optional(
+                    CONF_FAVORITES_FOLDER,
+                    default=self.config_entry.options.get(CONF_FAVORITES_FOLDER, ""),
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
             }
         )
         return self.async_show_form(

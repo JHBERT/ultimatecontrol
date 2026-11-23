@@ -39,10 +39,14 @@
     "step": {
       "init": {
         "title": "UltimateControl options",
-        "description": "Polling interval for the device status, and the network password.",
+        "description": "Polling interval, the network password, and an optional folder on the Home Assistant host whose SID files are copied into the favourites.",
         "data": {
           "scan_interval": "Status polling interval",
-          "password": "Network password (leave empty to keep)"
+          "password": "Network password (leave empty to keep)",
+          "favorites_folder": "Favourites folder (on the HA host)"
+        },
+        "data_description": {
+          "favorites_folder": "Absolute path, e.g. /config/media/favorites. Its SID files are copied into the favourites folder on save; leave empty to manage favourites from the dashboard."
         }
       }
     },

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
@@ -23,6 +24,11 @@ class UltimateControlRuntimeData:
     coordinator: DataUpdateCoordinator[dict]
     media_path: Path
     songlengths: SongLengthsDatabase = field(default_factory=SongLengthsDatabase)
+    # The local SID library (see library.py); created on first use so a device
+    # without a library never touches the disk.
+    library: Any = None
+    # What the dashboard started last: name, tune, song length.
+    last_played: dict[str, Any] = field(default_factory=dict)
 
     @property
     def info(self) -> dict:

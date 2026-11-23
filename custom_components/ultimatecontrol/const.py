@@ -8,9 +8,12 @@ CONF_PORT = "port"
 CONF_PASSWORD = "password"
 CONF_NAME = "name"
 CONF_SCAN_INTERVAL = "scan_interval"
+# Folder on the Home Assistant host whose SIDs become the favourites folder.
+CONF_FAVORITES_FOLDER = "favorites_folder"
 
 DEFAULT_PORT = 80
 DEFAULT_NAME = "Ultimate II+"
+DEFAULT_FAVORITES_FOLDER = ""
 DEFAULT_SCAN_INTERVAL = 30  # seconds between /v1/info polls
 DEFAULT_TIMEOUT = 10  # seconds for ordinary REST calls
 
@@ -18,12 +21,8 @@ DEFAULT_TIMEOUT = 10  # seconds for ordinary REST calls
 # has reset and DMA-loaded the file, which takes several seconds.
 RUNNER_TIMEOUT = 30
 
-# Path on the Ultimate used when the integration has to upload a file from
-# Home Assistant (HVSC stored on the HA host) to the device.
-UPLOAD_DIR = "/Temp/UltimateControl"
-
-# Sub-directory of the Home Assistant config dir used as local cache for SID
-# files (needed for song-length lookups and for uploads to the device).
+# Sub-directory of the Home Assistant config dir: the local SID library
+# (``sids``), the favourites (``favorites``) and the song length database.
 SID_CACHE_DIR = "ultimatecontrol"
 
 # File extensions the media browser exposes.

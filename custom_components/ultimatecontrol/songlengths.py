@@ -155,3 +155,14 @@ class SongLengthsDatabase:
     def get_all_lengths(self, sid_bytes: bytes) -> list[float]:
         """Return all sub tune lengths of a SID file."""
         return list(self._lengths.get(sid_md5(sid_bytes), []))
+
+    def get_lengths(self, md5: str) -> list[float]:
+        """Return all sub tune lengths for a known file hash (no file needed)."""
+        return list(self._lengths.get(md5.strip().lower(), []))
+
+    def length_of(self, md5: str, song_nr: int = 0) -> float | None:
+        """Return one sub tune's length in seconds (0-based), None if unknown."""
+        lengths = self._lengths.get(md5.strip().lower())
+        if not lengths or song_nr < 0 or song_nr >= len(lengths):
+            return None
+        return lengths[song_nr]

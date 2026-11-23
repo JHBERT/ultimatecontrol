@@ -16,6 +16,60 @@ Remote Control* enabled in the Ultimate menu) and gives you:
   being reported as playing when the tune is over,
 * a **config flow**: set the device up in the UI, no YAML.
 
+## SID-Auswahl im Dashboard (0.4.0)
+
+Die Integration bringt eine eigene Lovelace-Card mit: HVSC durchsuchen, einen
+Tune wählen, auf dem C64 abspielen, Favoriten pflegen.
+
+**Card hinzufügen**
+
+```yaml
+type: custom:ultimatecontrol-panel
+entry_id: <ID des Geräts>      # Einstellungen → Geräte → Ultimate → ID
+title: Ultimate 2 Cartridge
+```
+
+Die Card wird von der Integration selbst ausgeliefert
+(`/ultimatecontrol_panel/ultimatecontrol-panel.js`). Wenn dein Dashboard im
+YAML-Modus läuft, als Ressource eintragen:
+
+```yaml
+lovelace:
+  resources:
+    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0
+      type: module
+```
+
+Im UI-Modus: Einstellungen → Dashboards → ⋮ → Ressourcen → URL oben eintragen,
+Typ „JavaScript-Modul“.
+
+**Was die Card kann**
+
+| Aktion | Wie |
+| --- | --- |
+| HVSC/Bibliothek durchsuchen | Reiter **HVSC**, Ordner antippen |
+| Tune wählen | Datei mit mehreren Tunes antippen → Tune-Knöpfe mit Länge |
+| Abspielen | Tune-Knopf antippen; die Datei wird zum C64 gestreamt |
+| Favorit hinzufügen | Knopf **★ Favorit** in der Zeile „läuft gerade“ |
+| Favoriten anhören | Reiter **★ Favoriten** |
+
+**Ordner auf dem HA-Rechner**
+
+| Ordner | Inhalt |
+| --- | --- |
+| `config/ultimatecontrol/sids` | Bibliothek (HVSC); Unterordner erlaubt |
+| `config/ultimatecontrol/favorites` | Favoriten (Kopien aus der Bibliothek) |
+| `config/ultimatecontrol/Songlengths.md5` | optionale HVSC-Songlängen |
+
+Deinen Favoriten-Ordner einmalig übernehmen: Einstellungen → Integrationen →
+UltimateControl → **Konfigurieren** → *Favourites folder* auf den Pfad setzen
+(z. B. `/config/media/favoriten`). Beim Speichern werden alle `.sid`-Dateien
+hineinkopiert.
+
+**Songlängen**: werden beim Abspielen mitgeschickt und aus der HVSC-Datei
+`Songlengths.md5` per MD5 gelesen – Untertune-genau, auch für Dateien, die nur
+als Stream zum C64 gehen.
+
 ## Installation (HACS)
 
 1. HACS → *Integrations* → three-dot menu → *Custom repositories*
