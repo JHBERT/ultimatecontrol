@@ -29,6 +29,10 @@ class UltimateControlRuntimeData:
     library: Any = None
     # What the dashboard started last: name, tune, song length.
     last_played: dict[str, Any] = field(default_factory=dict)
+    # The folder queue of this device (queue_player.py); created at setup.
+    queue: Any = None
+    # Callbacks that fire when the queue moves on, so the dashboard follows.
+    queue_listeners: list[Any] = field(default_factory=list)
 
     @property
     def info(self) -> dict:

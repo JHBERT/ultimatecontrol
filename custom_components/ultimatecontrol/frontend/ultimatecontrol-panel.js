@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.6.2
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.7.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -135,6 +135,8 @@ class UltimateControlPanel extends HTMLElement {
     this._error = null;
     this._current = {};
     this._lastDir = {};
+    // Ordner-Warteschlange: was läuft, was kommt als Nächstes.
+    this._queue = { count: 0, index: -1, playing: false, items: [] };
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
@@ -176,7 +178,61 @@ class UltimateControlPanel extends HTMLElement {
     }
     await this._load();
     await this._refreshCurrent();
+    await this._queueStatus();
     await this._hvscStatus(false);
+  }
+
+  /* -------------------------------------------------- Warteschlange */
+  async _queueStatus() {
+    if (!this._live) return;
+    try {
+      this._queue = await this._ws("queue_status");
+    } catch (err) {
+      this._queue = { count: 0, index: -1, playing: false, items: [] };
+    }
+    this._render();
+  }
+
+  /* Ganzen Ordner abspielen: HA schickt Tune für Tune und timert dazwischen. */
+  async _playFolder(shuffle) {
+    if (this._folderBusy) return;
+    this._folderBusy = true;
+    this._error = null;
+    this._flash = null;
+    this._render();
+    try {
+      this._queue = await this._ws("queue_play_folder", {
+        source: this._view.source,
+        path: this._view.path,
+        shuffle: !!shuffle,
+      });
+      const count = this._queue.count || 0;
+      this._flash = `${count} Tune(s) in der Warteschlange`;
+      await this._refreshCurrent();
+    } catch (err) {
+      this._error = err.message || String(err);
+    } finally {
+      this._folderBusy = false;
+      this._render();
+    }
+  }
+
+  async _queueAction(action) {
+    if (this._queueBusy) return;
+    this._queueBusy = true;
+    this._error = null;
+    this._render();
+    try {
+      this._queue = await this._ws("queue_action", { action });
+      if (action === "next" || action === "previous" || action === "resume") {
+        await this._refreshCurrent();
+      }
+    } catch (err) {
+      this._error = err.message || String(err);
+    } finally {
+      this._queueBusy = false;
+      this._render();
+    }
   }
 
   /* Songlängen und HVSC-Version holen; refresh=true fragt den Mirror. */
@@ -456,6 +512,34 @@ class UltimateControlPanel extends HTMLElement {
   }
 
   /* -------------------------------------------------- Darstellung */
+  /* Die Leiste unter der Liste: was läuft, wie lange noch, nächster Tune. */
+  _queueBar() {
+    const q = this._queue || {};
+    if (!q.count) return "";
+    const items = q.items || [];
+    const cur = items[q.index] || null;
+    const next = items[q.index + 1] || null;
+    const left = q.playing && q.remaining ? this._fmtLength(q.remaining) : null;
+    const info = cur
+      ? `<b>${this._esc(cur.name)}</b> · ${q.index + 1}/${q.count}` +
+        (left ? ` · noch ${left}` : "") +
+        (next ? ` · dann ${this._esc(next.name)}` : " · letzter Tune")
+      : `${q.count} Tune(s) bereit`;
+    return `<div class="queue">
+      <div class="qtext">${q.playing ? "▶" : "⏸"} ${info}</div>
+      <div class="qbtns">
+        <button id="qPrev" title="Vorheriger Tune" ${q.index > 0 ? "" : "disabled"}>⏮</button>
+        <button id="qNext" title="Nächster Tune" ${next ? "" : "disabled"}>⏭</button>
+        ${
+          q.playing
+            ? `<button id="qPause" title="Anhalten">⏸</button>`
+            : `<button id="qPlay" title="Weiter" ${cur ? "" : "disabled"}>▶</button>`
+        }
+        <button id="qStop" title="Warteschlange beenden">⏹</button>
+      </div>
+    </div>`;
+  }
+
   _fmtLength(seconds) {
     if (!seconds && seconds !== 0) return "–";
     const m = Math.floor(seconds / 60);
@@ -648,6 +732,23 @@ class UltimateControlPanel extends HTMLElement {
                                border-color:transparent; color:#fff; }
         .hvsc button:disabled { opacity:.45; cursor:default; }
         .hvsc .warn { color:#ffb300; }
+        #playFolder { font:inherit; font-size:.8rem; padding:4px 12px; border-radius:14px;
+                      border:1px solid var(--divider-color,#444); background:transparent;
+                      color: var(--primary-text-color,#eee); cursor:pointer; }
+        #playFolder.primary { background: var(--primary-color,#03a9f4);
+                              border-color:transparent; color:#fff; }
+        #playFolder:disabled, #playShuffle:disabled { opacity:.45; cursor:default; }
+        #playShuffle { font:inherit; font-size:.8rem; padding:4px 10px; border-radius:14px;
+                       border:1px solid var(--divider-color,#444); background:transparent;
+                       color: var(--primary-text-color,#eee); cursor:pointer; }
+        .queue { display:flex; align-items:center; gap:8px; margin-top:10px; padding:8px 10px;
+                 border-radius:10px; background:rgba(127,127,127,.12); font-size:.78rem; }
+        .queue .qtext { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .queue .qbtns { display:flex; gap:4px; }
+        .queue button { font:inherit; font-size:.8rem; padding:2px 8px; border-radius:12px;
+                        border:1px solid var(--divider-color,#444); background:transparent;
+                        color: var(--primary-text-color,#eee); cursor:pointer; }
+        .queue button:disabled { opacity:.35; cursor:default; }
       </style>
       <ha-card>
         <div class="head">
@@ -661,9 +762,16 @@ class UltimateControlPanel extends HTMLElement {
         <div class="path">
           ${view.path ? `<button class="up">↰</button>` : ""}<span>${this._esc(crumb)}</span>
         </div>
+        <div class="path">
+          <button id="playFolder" class="primary" ${
+            this._folderBusy ? "disabled" : ""
+          } title="Alle SIDs dieses Ordners nacheinander spielen">▶ Ordner abspielen</button>
+          <button id="playShuffle" ${this._folderBusy ? "disabled" : ""} title="Zufällige Reihenfolge">🔀</button>
+        </div>
         <div class="list">
           ${rows || `<div class="empty">Keine SID-Dateien hier.</div>`}
         </div>
+        ${this._queueBar()}
         ${current}
         ${this._flash ? `<div class="msg ok">${this._esc(this._flash)}</div>` : ""}
         ${this._error ? `<div class="msg err">${this._esc(this._error)}</div>` : ""}
@@ -704,6 +812,20 @@ class UltimateControlPanel extends HTMLElement {
     if (unfav) unfav.addEventListener("click", () => this._unfavorite());
     const imp = root.querySelector("[data-import]");
     if (imp) imp.addEventListener("click", () => this._openImport());
+    const playFolder = root.querySelector("#playFolder");
+    if (playFolder) playFolder.addEventListener("click", () => this._playFolder(false));
+    const playShuffle = root.querySelector("#playShuffle");
+    if (playShuffle) playShuffle.addEventListener("click", () => this._playFolder(true));
+    const qPrev = root.querySelector("#qPrev");
+    if (qPrev) qPrev.addEventListener("click", () => this._queueAction("previous"));
+    const qNext = root.querySelector("#qNext");
+    if (qNext) qNext.addEventListener("click", () => this._queueAction("next"));
+    const qStop = root.querySelector("#qStop");
+    if (qStop) qStop.addEventListener("click", () => this._queueAction("stop"));
+    const qPause = root.querySelector("#qPause");
+    if (qPause) qPause.addEventListener("click", () => this._queueAction("pause"));
+    const qPlay = root.querySelector("#qPlay");
+    if (qPlay) qPlay.addEventListener("click", () => this._queueAction("resume"));
   }
 
   _esc(value) {

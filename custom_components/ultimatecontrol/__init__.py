@@ -51,7 +51,7 @@ CONF_FOLDER = "folder"
 CONF_SUBFOLDER = "subfolder"
 
 # The dashboard card; served as a module so a dashboard needs no file copy.
-PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.6.2"
+PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.7.0"
 
 # Optional file name of the HVSC song length database inside the cache folder.
 # The raw ``Songlengths.md5`` is parsed, the JSON file (built with
@@ -116,6 +116,19 @@ async def async_setup_entry(
         songlengths=songlengths,
         library=library,
     )
+    # The folder queue: its timer must be a Home Assistant background task, so
+    # it is stopped with the entry instead of outliving it.
+    queue = websocket_api.queue_for(entry.runtime_data)
+    queue._factory = lambda coro: hass.async_create_background_task(  # noqa: SLF001
+        coro, name=f"{DOMAIN} queue"
+    )
+
+    @callback
+    def _queue_moved() -> None:
+        """Fire an event so the dashboard can follow the queue."""
+        hass.bus.async_fire(f"{DOMAIN}_queue_changed", entry.runtime_data.queue.state.as_dict())
+
+    entry.runtime_data.queue_listeners.append(_queue_moved)
 
     websocket_api.async_register(hass)
     _async_serve_panel(hass)
@@ -131,6 +144,9 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: UltimateControlConfigEntry
 ) -> bool:
     """Unload a config entry."""
+    runtime = entry.runtime_data
+    if runtime is not None and runtime.queue is not None:
+        runtime.queue.cancel()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

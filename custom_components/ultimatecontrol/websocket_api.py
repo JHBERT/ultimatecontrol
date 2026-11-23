@@ -122,6 +122,9 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_current)
     websocket_api.async_register_command(hass, ws_hvsc_status)
     websocket_api.async_register_command(hass, ws_hvsc_download_songlengths)
+    websocket_api.async_register_command(hass, ws_queue_play_folder)
+    websocket_api.async_register_command(hass, ws_queue_action)
+    websocket_api.async_register_command(hass, ws_queue_status)
     hass.http.register_view(UltimateSidView(hass))
 
 
@@ -590,3 +593,209 @@ async def ws_hvsc_download_songlengths(
     connection.send_result(
         msg["id"], {"bytes": size, "entries": len(database), "path": str(target)}
     )
+
+
+# ----------------------------------------------------------------------
+# Folder queue
+# ----------------------------------------------------------------------
+def queue_for(runtime: UltimateControlRuntimeData) -> Any:
+    """Return the queue of a device, creating it when the entry has none."""
+    from .queue_player import QueuePlayer
+
+    if getattr(runtime, "queue", None) is not None:
+        return runtime.queue
+
+    async def _length_of(item: Any) -> float | None:
+        """Look up a tune's length from the library by its file hash."""
+        library = _library(runtime)
+        try:
+            path = await asyncio.get_running_loop().run_in_executor(
+                None, library.find, item.source, item.path
+            )
+            data = await asyncio.get_running_loop().run_in_executor(
+                None, path.read_bytes
+            )
+        except (SidLibraryError, OSError):
+            return None
+        length = runtime.songlengths.get_length(data, item.song - 1)
+        return float(length) if length else None
+
+    runtime.queue = QueuePlayer(
+        _play_queue_item(runtime),
+        length_of=_length_of,
+    )
+    return runtime.queue
+
+
+def _play_queue_item(runtime: UltimateControlRuntimeData):
+    """Return the callback that sends one queue item to the device."""
+    from .songlengths import ssl_payload_for
+
+    async def _play(item: Any) -> None:
+        library = _library(runtime)
+        api = runtime.api
+        path = await asyncio.get_running_loop().run_in_executor(
+            None, library.find, item.source, item.path
+        )
+        data = await asyncio.get_running_loop().run_in_executor(None, path.read_bytes)
+        if data[:4] not in SID_MAGIC:
+            raise SidLibraryError(f"{path.name} is not a SID file")
+        songs = count_subtunes(data)
+        song = min(item.song, songs)
+        length = runtime.songlengths.get_length(data, song - 1)
+        if length:
+            item.length = float(length)
+        await api.async_upload_and_play_sid(
+            data, song, ssl_payload_for(data, runtime.songlengths)
+        )
+        runtime.last_played = {
+            "name": path.name,
+            "path": item.path,
+            "source": item.source,
+            "song": song,
+            "songs": songs,
+            "length": item.length,
+            "song_length": item.length,
+            "queue": True,
+        }
+        _notify_queue(runtime)
+
+    return _play
+
+
+def _notify_queue(runtime: UltimateControlRuntimeData) -> None:
+    """Tell the dashboard that the queue moved on."""
+    for listener in list(getattr(runtime, "queue_listeners", []) or []):
+        try:
+            listener()
+        except Exception:  # noqa: BLE001 - one broken listener must not stop the queue
+            _LOGGER.debug("Queue listener failed", exc_info=True)
+
+
+def _folder_items(
+    library: SidLibrary, source: str, folder: str, song: int | None
+) -> list[Any]:
+    """Return every SID of a folder (and its sub folders) as queue items."""
+    from .queue_player import QueueItem
+
+    base = library.favorites_dir if source == "favorites" else library.library_dir
+    target = base / folder if folder else base
+    if not target.is_dir():
+        raise SidLibraryError(f"Folder not found: {folder or '(root)'}")
+    items: list[QueueItem] = []
+    for file in sorted(target.rglob("*"), key=lambda p: str(p).casefold()):
+        if not file.is_file() or file.suffix.lower() != ".sid":
+            continue
+        relative = file.relative_to(base).as_posix()
+        try:
+            info = library.inspect(file)
+        except SidLibraryError:
+            continue
+        items.append(
+            QueueItem(
+                source=source,
+                path=relative,
+                name=file.name,
+                song=min(song or 1, info.songs),
+                length=info.duration if (song or 1) == 1 else None,
+            )
+        )
+    return items
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/queue_play_folder",
+        vol.Required("entry_id"): str,
+        vol.Optional("source", default="library"): str,
+        vol.Optional("path", default=""): str,
+        vol.Optional("song"): vol.All(int, vol.Range(min=1, max=256)),
+        vol.Optional("shuffle", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_queue_play_folder(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Play every SID of a folder, one after the other, on a timer."""
+    runtime = _runtime(hass, msg["entry_id"])
+    library = _library(runtime)
+    try:
+        items = await hass.async_add_executor_job(
+            _folder_items,
+            library,
+            msg.get("source", "library"),
+            msg.get("path", ""),
+            msg.get("song"),
+        )
+    except SidLibraryError as err:
+        connection.send_error(msg["id"], "not_found", str(err))
+        return
+    if not items:
+        connection.send_error(msg["id"], "empty", "No SID files in this folder")
+        return
+    if msg.get("shuffle"):
+        import random
+
+        random.shuffle(items)
+
+    player = queue_for(runtime)
+    player.replace(items, title=msg.get("path", ""))
+    try:
+        state = await player.start()
+    except Exception as err:  # noqa: BLE001 - a device error is the answer
+        connection.send_error(msg["id"], "device_error", str(err))
+        return
+    _notify_queue(runtime)
+    connection.send_result(msg["id"], state.as_dict())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/queue_action",
+        vol.Required("entry_id"): str,
+        vol.Required("action"): vol.In(["next", "previous", "stop", "pause", "resume"]),
+    }
+)
+@websocket_api.async_response
+async def ws_queue_action(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Step the queue: next, previous, stop, pause or resume."""
+    runtime = _runtime(hass, msg["entry_id"])
+    player = queue_for(runtime)
+    action = msg["action"]
+    try:
+        if action == "next":
+            state = await player.next()
+        elif action == "previous":
+            state = await player.previous()
+        elif action == "stop":
+            state = player.stop()
+            await runtime.api.async_reset()
+        elif action == "pause":
+            await runtime.api.async_pause()
+            player.cancel()
+            player.state.playing = False
+            player.state.remaining = None
+            state = player.state
+        else:
+            await runtime.api.async_resume()
+            state = await player.start()
+    except Exception as err:  # noqa: BLE001
+        connection.send_error(msg["id"], "device_error", str(err))
+        return
+    _notify_queue(runtime)
+    connection.send_result(msg["id"], state.as_dict())
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/queue_status", vol.Required("entry_id"): str}
+)
+@websocket_api.async_response
+async def ws_queue_status(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Report the queue: items, position and the time left on the timer."""
+    runtime = _runtime(hass, msg["entry_id"])
+    connection.send_result(msg["id"], queue_for(runtime).state.as_dict())
