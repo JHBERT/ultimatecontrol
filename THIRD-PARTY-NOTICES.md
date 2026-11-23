@@ -1,9 +1,9 @@
 # Danksagung und fremde Bestandteile
 
-UltimateControl steht unter der **GNU General Public License v3.0** (siehe
-`LICENSE`); Rechteinhaber ist **JHBERT** (github.com/JHBERT). Dieses Dokument nennt, was darin von anderen stammt – Code,
-Schnittstellen, Daten und Wissen. Es ist bewusst ausführlich: bei einer
-GPL-Veröffentlichung soll man nachlesen können, woher etwas kommt.
+UltimateControl steht unter der **MIT-Lizenz** (siehe `LICENSE`);
+Rechteinhaber ist **JHBERT** (github.com/JHBERT). Dieses Dokument nennt, was
+darin von anderen stammt – Code, Schnittstellen, Daten und Wissen. Es ist
+bewusst ausführlich: man soll nachlesen können, woher etwas kommt.
 
 ## 1. Fremder Code im Repository
 
@@ -13,7 +13,8 @@ eingebunden; auch die Karte (`frontend/ultimatecontrol-panel.js`) ist ein
 eigenes Web Component ohne Fremdbibliotheken (kein Lit, kein Frameworks).
 
 Damit enthält das Repository **keine** Bestandteile unter einer anderen Lizenz,
-die genannt werden müssten.
+die genannt werden müssten. Das ist auch der Grund für die MIT-Lizenz: sie
+verträgt sich mit allem, was hier sonst noch zusammenkommt.
 
 ## 2. Laufzeit-Abhängigkeiten (nicht mitgeliefert)
 
@@ -68,6 +69,8 @@ Code** daraus übernommen:
 - **ultimate64** von mlund (Apache-2.0) – Rust-Bibliothek, die zeigt, wie
   `sidplay` mit `songnr` aufgerufen wird.
 - **c64-pi-jukebox** von sedorrr (GPL-3.0) – Warteschlange und Songlängen-Idee.
+  Aus diesem Projekt ist **kein Code** übernommen; es diente nur als Vorbild,
+  deshalb zieht seine GPL keine Pflichten für UltimateControl nach sich.
 - **Home Assistant** – die Integration folgt den offiziellen
   Entwicklerrichtlinien (`config_flow`, `DataUpdateCoordinator`, `media_source`,
   eigene Lovelace-Ressource).

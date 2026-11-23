@@ -203,10 +203,10 @@ parser are covered without hardware and without Home Assistant.
 
 ## Lizenz
 
-UltimateControl steht unter der **GNU General Public License v3.0** – siehe
-[`LICENSE`](LICENSE). Kurz gesagt: benutzen, verändern und weitergeben ist
-erlaubt; wer es weitergibt, muss den Quelltext offenlegen und die Lizenz
-mitgeben. Rechteinhaber: **JHBERT** (github.com/JHBERT).
+UltimateControl steht unter der **MIT-Lizenz** – siehe [`LICENSE`](LICENSE).
+Kurz gesagt: benutzen, verändern, weitergeben und auch kommerziell einsetzen
+ist erlaubt; es muss nur der Copyright-Hinweis und der Lizenztext beiliegen.
+Keine Gewährleistung.
 
 Was von anderen stammt (Schnittstellen, Formate, Daten, Anregungen) und was
 nicht, steht in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Kurz:
