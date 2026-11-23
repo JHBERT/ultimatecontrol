@@ -120,6 +120,8 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_host_folders)
     websocket_api.async_register_command(hass, ws_play)
     websocket_api.async_register_command(hass, ws_current)
+    websocket_api.async_register_command(hass, ws_hvsc_status)
+    websocket_api.async_register_command(hass, ws_hvsc_download_songlengths)
     hass.http.register_view(UltimateSidView(hass))
 
 
@@ -499,3 +501,88 @@ class UltimateSidView(HomeAssistantView):
             content_type="application/octet-stream",
             headers={"Content-Disposition": f'inline; filename="{file.name}"'},
         )
+
+
+# ----------------------------------------------------------------------
+# HVSC: song lengths and version
+# ----------------------------------------------------------------------
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/hvsc_status",
+        vol.Required("entry_id"): str,
+        vol.Optional("refresh", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_hvsc_status(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Report the song length database and whether a newer HVSC exists."""
+    from . import hvsc_download
+
+    runtime = _runtime(hass, msg["entry_id"])
+    documents = runtime.media_path / hvsc_download.DOCUMENTS_PATH
+    songlengths_file = await hass.async_add_executor_job(
+        hvsc_download.local_songlengths, runtime.media_path
+    )
+    local = await hass.async_add_executor_job(hvsc_download.local_release, documents)
+
+    remote: int | None = None
+    error: str | None = None
+    cached = hass.data.get(f"{DOMAIN}_hvsc_remote")
+    if msg.get("refresh") or cached is None:
+        try:
+            session = async_get_clientsession(hass)
+            remote = await hvsc_download.async_remote_release(session)
+            hass.data[f"{DOMAIN}_hvsc_remote"] = remote
+        except Exception as err:  # noqa: BLE001 - offline is not an error state
+            error = str(err)
+            remote = cached
+    else:
+        remote = cached
+
+    release = hvsc_download.ReleaseInfo(remote=remote, local=local)
+    connection.send_result(
+        msg["id"],
+        {
+            **release.as_dict(),
+            "songlengths": len(runtime.songlengths),
+            "songlengths_file": str(songlengths_file) if songlengths_file else None,
+            "documents_dir": str(documents),
+            "error": error,
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/hvsc_download_songlengths",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_hvsc_download_songlengths(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Download Songlengths.md5 and load it into the running integration."""
+    from . import hvsc_download
+    from .songlengths import SongLengthsDatabase
+
+    runtime = _runtime(hass, msg["entry_id"])
+    target = runtime.media_path / hvsc_download.SONGLENGTHS_NAME
+    try:
+        size = await hvsc_download.async_download_songlengths(
+            async_get_clientsession(hass), target
+        )
+    except hvsc_download.HvscDownloadError as err:
+        raise websocket_api.ConnectionError("download_failed", str(err)) from err
+
+    database = await hass.async_add_executor_job(SongLengthsDatabase.from_file, target)
+    runtime.songlengths = database
+    if getattr(runtime, "library", None) is not None:
+        runtime.library.songlengths = database
+        runtime.library.clear_cache()
+
+    connection.send_result(
+        msg["id"], {"bytes": size, "entries": len(database), "path": str(target)}
+    )

@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.6.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -77,6 +77,8 @@ class UltimateControlPanelEditor extends HTMLElement {
         }>${this._esc(label)}</option>`;
       })
       .join("");
+
+    const hvscBar = this._hvscBar();
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -176,6 +178,39 @@ class UltimateControlPanel extends HTMLElement {
     }
     await this._load();
     await this._refreshCurrent();
+    await this._hvscStatus(false);
+  }
+
+  /* Songlängen und HVSC-Version holen; refresh=true fragt den Mirror. */
+  async _hvscStatus(refresh) {
+    if (!this._live) return;
+    try {
+      this._hvsc = await this._ws("hvsc_status", { refresh: !!refresh });
+    } catch (err) {
+      this._hvsc = { error: err.message || String(err) };
+    }
+    this._render();
+  }
+
+  async _hvscDownload() {
+    if (this._hvscBusy) return;
+    this._hvscBusy = true;
+    this._flash = null;
+    this._error = null;
+    this._render();
+    try {
+      const result = await this._ws("hvsc_download_songlengths");
+      this._flash =
+        `Songlängen geladen: ${result.entries} SIDs` +
+        (result.bytes ? ` (${Math.round(result.bytes / 1024)} KB)` : "");
+      await this._load();
+      await this._hvscStatus(false);
+    } catch (err) {
+      this._error = err.message || String(err);
+    } finally {
+      this._hvscBusy = false;
+      this._render();
+    }
   }
 
   /* Sucht das Gerät, wenn 'entry_id' fehlt oder nicht (mehr) stimmt.
@@ -308,6 +343,51 @@ class UltimateControlPanel extends HTMLElement {
       this._error = err.message || String(err);
     }
     this._render();
+  }
+
+  async _unfavorite() {
+    const cur = this._current || {};
+    if (!cur.path || cur.source !== "favorites") return;
+    try {
+      await this._ws("favorite_remove", { path: cur.path });
+      this._flash = `${cur.name} ist nicht mehr in den Favoriten`;
+      this._current = {};
+      await this._load();
+      return;
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
+    this._render();
+  }
+
+  /* Zeile am Kartenende: Songlängen-Status und HVSC-Version. */
+  _hvscBar() {
+    if (!this._live || !this._hvsc) return "";
+    const st = this._hvsc;
+    const count = st.songlengths || 0;
+    const parts = [];
+    if (count) {
+      parts.push(`Songlängen: <strong>${count}</strong> SIDs`);
+    } else {
+      parts.push(`<span class="warn">Keine Songlängen – jede Melodie spielt 5 Minuten.</span>`);
+    }
+    if (st.local) parts.push(`HVSC ${st.local}`);
+    if (st.remote && st.update_available) {
+      parts.push(`<span class="warn">Update ${st.remote} verfügbar</span>`);
+    } else if (st.remote && st.local) {
+      parts.push(`aktuell`);
+    }
+    return `<div class="hvsc">
+      <span class="grow">${parts.join(" · ")}</span>
+      ${
+        count
+          ? ""
+          : `<button class="primary" id="hvscGet" ${this._hvscBusy ? "disabled" : ""}>
+               ${this._hvscBusy ? "lädt …" : "Songlängen laden"}
+             </button>`
+      }
+      <button id="hvscCheck" title="Beim HVSC-Mirror nach einer neuen Version fragen">Prüfen</button>
+    </div>`;
   }
 
   _up() {
@@ -502,12 +582,23 @@ class UltimateControlPanel extends HTMLElement {
     const crumb = (view.path || "…").split("/").filter(Boolean).join(" / ");
     const current = cur.name
       ? `<div class="now">
-           ${cur.source !== "device" ? `<button id="fav" title="Zur aktuellen Datei in die Favoriten">★ Favorit</button>` : ""}
+           ${
+             cur.source !== "device" && view.source !== "favorites"
+               ? `<button id="fav" title="Zur aktuellen Datei in die Favoriten">★ Favorit</button>`
+               : ""
+           }
+           ${
+             view.source === "favorites" && cur.source === "favorites"
+               ? `<button id="unfav" title="Aus den Favoriten entfernen">✕ Entfernen</button>`
+               : ""
+           }
            <span class="nowText">▶ ${this._esc(cur.name)}${
              cur.song && cur.songs ? ` · Tune ${cur.song}/${cur.songs}` : ""
            }${cur.song_length ? ` · ${this._fmtLength(cur.song_length)}` : ""}</span>
          </div>`
       : "";
+
+    const hvscBar = this._hvscBar();
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -516,7 +607,7 @@ class UltimateControlPanel extends HTMLElement {
         .head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
         .title { font-size:1.05rem; font-weight:600; flex:1; }
         .tabs { display:flex; gap:4px; }
-        .tabs button, #fav {
+        .tabs button, #fav, #unfav {
           font:inherit; font-size:.8rem; padding:4px 10px; border-radius:14px;
           border:1px solid var(--divider-color,#444); background:transparent;
           color: var(--primary-text-color,#eee); cursor:pointer;
@@ -548,6 +639,17 @@ class UltimateControlPanel extends HTMLElement {
         .msg.err { color: var(--error-color,#f44336); }
         .msg.ok { color: var(--success-color,#4caf50); }
         .empty { font-size:.85rem; color: var(--secondary-text-color,#888); padding:10px 4px; }
+        .hvsc { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px;
+                padding-top:8px; border-top:1px solid var(--divider-color,#333);
+                font-size:.76rem; color: var(--secondary-text-color,#999); }
+        .hvsc .grow { flex:1; }
+        .hvsc button { font:inherit; font-size:.76rem; padding:3px 10px; border-radius:12px;
+                       border:1px solid var(--divider-color,#444); background:transparent;
+                       color: var(--primary-text-color,#eee); cursor:pointer; }
+        .hvsc button.primary { background: var(--primary-color,#03a9f4);
+                               border-color:transparent; color:#fff; }
+        .hvsc button:disabled { opacity:.45; cursor:default; }
+        .hvsc .warn { color:#ffb300; }
       </style>
       <ha-card>
         <div class="head">
@@ -567,6 +669,7 @@ class UltimateControlPanel extends HTMLElement {
         ${current}
         ${this._flash ? `<div class="msg ok">${this._esc(this._flash)}</div>` : ""}
         ${this._error ? `<div class="msg err">${this._esc(this._error)}</div>` : ""}
+        ${hvscBar}
       </ha-card>`;
 
     const root = this.shadowRoot;
@@ -595,6 +698,12 @@ class UltimateControlPanel extends HTMLElement {
     if (up) up.addEventListener("click", () => this._up());
     const fav = root.querySelector("#fav");
     if (fav) fav.addEventListener("click", () => this._favorite());
+    const hvscGet = root.querySelector("#hvscGet");
+    if (hvscGet) hvscGet.addEventListener("click", () => this._hvscDownload());
+    const hvscCheck = root.querySelector("#hvscCheck");
+    if (hvscCheck) hvscCheck.addEventListener("click", () => this._hvscStatus(true));
+    const unfav = root.querySelector("#unfav");
+    if (unfav) unfav.addEventListener("click", () => this._unfavorite());
     const imp = root.querySelector("[data-import]");
     if (imp) imp.addEventListener("click", () => this._openImport());
   }

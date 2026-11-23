@@ -155,6 +155,10 @@ class SidLibrary:
         self._cache[key] = info
         return info
 
+    def clear_cache(self) -> None:
+        """Forget cached metadata, e.g. after the song length database changed."""
+        self._cache.clear()
+
     def find(self, source: str, relative: str) -> Path:
         """Return the path of a file in the library or the favourites."""
         base = self.favorites_dir if source == "favorites" else self.library_dir
