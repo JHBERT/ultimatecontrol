@@ -1,7 +1,7 @@
 # Danksagung und fremde Bestandteile
 
 UltimateControl steht unter der **GNU General Public License v3.0** (siehe
-`LICENSE`). Dieses Dokument nennt, was darin von anderen stammt – Code,
+`LICENSE`); Rechteinhaber ist **JHBERT** (github.com/JHBERT). Dieses Dokument nennt, was darin von anderen stammt – Code,
 Schnittstellen, Daten und Wissen. Es ist bewusst ausführlich: bei einer
 GPL-Veröffentlichung soll man nachlesen können, woher etwas kommt.
 

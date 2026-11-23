@@ -206,7 +206,7 @@ parser are covered without hardware and without Home Assistant.
 UltimateControl steht unter der **GNU General Public License v3.0** – siehe
 [`LICENSE`](LICENSE). Kurz gesagt: benutzen, verändern und weitergeben ist
 erlaubt; wer es weitergibt, muss den Quelltext offenlegen und die Lizenz
-mitgeben.
+mitgeben. Rechteinhaber: **JHBERT** (github.com/JHBERT).
 
 Was von anderen stammt (Schnittstellen, Formate, Daten, Anregungen) und was
 nicht, steht in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Kurz:
