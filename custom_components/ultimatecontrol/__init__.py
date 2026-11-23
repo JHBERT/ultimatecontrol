@@ -16,7 +16,11 @@ from datetime import timedelta
 from pathlib import Path
 
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
-from homeassistant.core import HomeAssistant, callback
+import voluptuous as vol
+
+from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -33,13 +37,18 @@ from .const import (
     SID_CACHE_DIR,
 )
 from . import websocket_api
-from .library import SidLibrary
+from .library import SidLibrary, SidLibraryError
 from .runtime_data import UltimateControlConfigEntry, UltimateControlRuntimeData
 from .songlengths import SongLengthsDatabase
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER]
+
+SERVICE_IMPORT = "import_folder"
+ATTR_ENTRY_ID = "entry_id"
+CONF_FOLDER = "folder"
+CONF_SUBFOLDER = "subfolder"
 
 # The dashboard card; served as a module so a dashboard needs no file copy.
 PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0"
@@ -110,6 +119,7 @@ async def async_setup_entry(
 
     websocket_api.async_register(hass)
     _async_serve_panel(hass)
+    _async_register_services(hass)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -144,6 +154,60 @@ class PanelView(HomeAssistantView):
 def async_serve_panel_source() -> bytes:
     """Return the card's source (read on demand from the integration folder)."""
     return (Path(__file__).parent / "frontend" / "ultimatecontrol-panel.js").read_bytes()
+
+
+async def _async_handle_import(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Copy all SID files of a folder on the host into the library."""
+    runtime = websocket_api.runtime_for(hass, call.data[ATTR_ENTRY_ID])
+    library = websocket_api.library_for(runtime)
+    folder = Path(call.data[CONF_FOLDER]).expanduser()
+    subfolder = (call.data.get(CONF_SUBFOLDER) or "").strip("/")
+    if not folder.is_dir():
+        raise HomeAssistantError(f"Not a folder: {folder}")
+
+    def _copy() -> tuple[int, list[str]]:
+        imported = 0
+        skipped: list[str] = []
+        for file in sorted(folder.rglob("*")):
+            if not file.is_file() or file.suffix.lower() != ".sid":
+                continue
+            relative = file.relative_to(folder).as_posix()
+            if subfolder:
+                relative = f"{subfolder}/{relative}"
+            try:
+                library.import_file(file, relative)
+                imported += 1
+            except SidLibraryError as err:
+                skipped.append(f"{relative}: {err}")
+        return imported, skipped
+
+    imported, skipped = await hass.async_add_executor_job(_copy)
+    _LOGGER.info(
+        "Imported %s SID file(s) from %s, %s skipped", imported, folder, len(skipped)
+    )
+
+
+IMPORT_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTRY_ID): cv.string,
+        vol.Required(CONF_FOLDER): cv.string,
+        vol.Optional(CONF_SUBFOLDER): cv.string,
+    }
+)
+
+
+@callback
+def _async_register_services(hass: HomeAssistant) -> None:
+    """Register the integration's services once."""
+    if hass.services.has_service(DOMAIN, SERVICE_IMPORT):
+        return
+
+    async def _import(call: ServiceCall) -> None:
+        await _async_handle_import(hass, call)
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_IMPORT, _import, schema=IMPORT_SCHEMA
+    )
 
 
 @callback

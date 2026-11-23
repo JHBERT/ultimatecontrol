@@ -36,6 +36,21 @@ _LOGGER = logging.getLogger(__name__)
 SID_MAGIC = (b"PSID", b"RSID")
 
 
+def runtime_for(hass: HomeAssistant, entry_id: str) -> UltimateControlRuntimeData:
+    """Return the runtime data of one device (raises HomeAssistantError)."""
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None or entry.domain != DOMAIN or entry.runtime_data is None:
+        from homeassistant.exceptions import HomeAssistantError
+
+        raise HomeAssistantError(f"No UltimateControl device with id {entry_id}")
+    return entry.runtime_data
+
+
+def library_for(runtime: UltimateControlRuntimeData) -> SidLibrary:
+    """Return the SID library of a device (same instance as the websocket API)."""
+    return _library(runtime)
+
+
 def _runtime(hass: HomeAssistant, entry_id: str) -> UltimateControlRuntimeData:
     """Return the runtime data of a config entry, or raise a websocket error."""
     entry = hass.config_entries.async_get_entry(entry_id)

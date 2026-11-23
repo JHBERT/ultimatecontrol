@@ -54,5 +54,25 @@
       "cannot_connect": "Cannot reach the device.",
       "invalid_auth": "The network password was refused (HTTP 403)."
     }
+  },
+  "services": {
+    "import_folder": {
+      "name": "SID folder import",
+      "description": "Copy every SID file of a folder on the Home Assistant host into the local SID library.",
+      "fields": {
+        "entry_id": {
+          "name": "Device",
+          "description": "The Ultimate device the library belongs to."
+        },
+        "folder": {
+          "name": "Folder",
+          "description": "Absolute path on the Home Assistant host."
+        },
+        "subfolder": {
+          "name": "Sub folder",
+          "description": "Optional folder inside the library."
+        }
+      }
+    }
   }
 }

@@ -1,0 +1,27 @@
+import_folder:
+  name: SID folder import
+  description: >-
+    Copy every SID file of a folder on the Home Assistant host into the local
+    SID library, so the dashboard card can list and play them.
+  fields:
+    entry_id:
+      name: Device
+      description: The Ultimate device the library belongs to.
+      required: true
+      selector:
+        config_entry:
+          integration: ultimatecontrol
+    folder:
+      name: Folder
+      description: Absolute path on the Home Assistant host.
+      required: true
+      example: /config/media/phat
+      selector:
+        text:
+    subfolder:
+      name: Sub folder
+      description: Optional folder inside the library for the imported files.
+      required: false
+      example: phat
+      selector:
+        text:
