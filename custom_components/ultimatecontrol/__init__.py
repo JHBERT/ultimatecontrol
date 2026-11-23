@@ -36,7 +36,7 @@ from .const import (
     DOMAIN,
     SID_CACHE_DIR,
 )
-from . import websocket_api
+from . import lovelace, websocket_api
 from .library import SidLibrary, SidLibraryError
 from .runtime_data import UltimateControlConfigEntry, UltimateControlRuntimeData
 from .songlengths import SongLengthsDatabase
@@ -51,7 +51,7 @@ CONF_FOLDER = "folder"
 CONF_SUBFOLDER = "subfolder"
 
 # The dashboard card; served as a module so a dashboard needs no file copy.
-PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.1"
+PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.2"
 
 # Optional file name of the HVSC song length database inside the cache folder.
 # The raw ``Songlengths.md5`` is parsed, the JSON file (built with
@@ -120,6 +120,7 @@ async def async_setup_entry(
     websocket_api.async_register(hass)
     _async_serve_panel(hass)
     _async_register_services(hass)
+    lovelace.async_ensure_resource(hass, PANEL_URL)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))

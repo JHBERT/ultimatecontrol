@@ -34,13 +34,15 @@ title: Ultimate 2 Cartridge
 Gerät genommen.
 
 Die Card wird von der Integration selbst ausgeliefert
-(`/ultimatecontrol_panel/ultimatecontrol-panel.js`). Wenn dein Dashboard im
-YAML-Modus läuft, als Ressource eintragen:
+(`/ultimatecontrol_panel/ultimatecontrol-panel.js`) und seit 0.4.2 **automatisch
+als Lovelace-Ressource eingetragen** – im UI-Modus musst du nichts tun. Nur wenn
+dein Dashboard im YAML-Modus läuft, gehört die Ressource in deine
+`configuration.yaml`:
 
 ```yaml
 lovelace:
   resources:
-    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.1
+    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.2
       type: module
 ```
 
