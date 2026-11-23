@@ -56,9 +56,16 @@ def _runtime(hass: HomeAssistant, entry_id: str) -> UltimateControlRuntimeData:
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain != DOMAIN or entry.runtime_data is None:
         raise websocket_api.ConnectionError(
-            "unknown_entry", f"No UltimateControl device with id {entry_id}"
+            "unknown_entry",
+            "No UltimateControl device with the id "
+            f"'{entry_id}'. Configured ids: {', '.join(entry_ids(hass)) or 'none yet'}",
         )
     return entry.runtime_data
+
+
+def entry_ids(hass: HomeAssistant) -> list[str]:
+    """Return the config entry ids of all configured devices."""
+    return [entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)]
 
 
 def _library(runtime: UltimateControlRuntimeData) -> SidLibrary:
@@ -71,6 +78,32 @@ def _library(runtime: UltimateControlRuntimeData) -> SidLibrary:
     return library
 
 
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/devices"})
+@websocket_api.async_response
+async def ws_devices(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List the configured devices: entry id, title and host.
+
+    The card uses this when its ``entry_id`` is missing or wrong, so a dashboard
+    keeps working after the entry was re-added (a new id) or when the unique id
+    of the device was used instead.
+    """
+    devices = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        runtime = entry.runtime_data
+        devices.append(
+            {
+                "entry_id": entry.entry_id,
+                "title": entry.title,
+                "host": entry.data.get(CONF_HOST),
+                "unique_id": entry.unique_id,
+                "info": (runtime.info if runtime is not None else {}) or {},
+            }
+        )
+    connection.send_result(msg["id"], devices)
+
+
 @callback
 def async_register(hass: HomeAssistant) -> None:
     """Register the websocket commands once for the whole integration."""
@@ -78,6 +111,7 @@ def async_register(hass: HomeAssistant) -> None:
         return
     hass.data[f"{DOMAIN}_ws_registered"] = True
 
+    websocket_api.async_register_command(hass, ws_devices)
     websocket_api.async_register_command(hass, ws_browse)
     websocket_api.async_register_command(hass, ws_inspect)
     websocket_api.async_register_command(hass, ws_favorite_add)

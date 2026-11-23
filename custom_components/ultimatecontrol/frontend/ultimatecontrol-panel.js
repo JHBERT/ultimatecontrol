@@ -1,20 +1,20 @@
 /**
  * UltimateControl – SID-Auswahl für das Dashboard.
  *
- * Ablage: /config/www/ultimatecontrol-panel.js
- * Ressource: /local/ultimatecontrol-panel.js  (JavaScript-Modul)
+ * Die Integration liefert diese Datei unter
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js
+ * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0
  *
  * type: custom:ultimatecontrol-panel
- * entry_id: <ID des Geräts>          (siehe Einstellungen → Geräte)
+ * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
  * title: Ultimate 2 Cartridge        (optional)
  */
 const DOMAIN = "ultimatecontrol";
 
 class UltimateControlPanel extends HTMLElement {
   setConfig(config) {
-    if (!config.entry_id) {
-      throw new Error("ultimatecontrol-panel: 'entry_id' fehlt (Einstellungen → Geräte → Ultimate)");
-    }
+    // entry_id darf fehlen: die Card sucht sich das Gerät dann selbst.
     this._config = { source: "library", path: "", title: "SID-Auswahl", ...config };
     this._hass = null;
     this._view = { source: this._config.source, path: this._config.path };
@@ -30,6 +30,9 @@ class UltimateControlPanel extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    // Nur eine echte Home-Assistant-Verbindung hat `states`; die Demo-Attrappe
+    // reicht ein Objekt ohne, damit die Vorschau ohne HA funktioniert.
+    this._live = !!(hass && hass.states && hass.connection);
     if (first) {
       this._firstLoad();
     }
@@ -41,14 +44,57 @@ class UltimateControlPanel extends HTMLElement {
 
   /* -------------------------------------------------- Laden */
   async _firstLoad() {
+    if (this._live) {
+      await this._resolveDevice();
+    }
+    if (this._resolveError) {
+      this._render();
+      return;
+    }
     await this._load();
     await this._refreshCurrent();
+  }
+
+  /* Sucht das Gerät, wenn 'entry_id' fehlt oder nicht (mehr) stimmt.
+     Akzeptiert auch die unique_id des Geräts (z. B. 415204). */
+  async _resolveDevice() {
+    try {
+      const devices = await this._hass.connection.sendMessagePromise({
+        type: `${DOMAIN}/devices`,
+      });
+      if (!devices.length) {
+        this._resolveError =
+          "Kein UltimateControl-Gerät eingerichtet (Einstellungen → Geräte & Dienste).";
+        return;
+      }
+      const wanted = String(this._config.entry_id || "").trim();
+      const match =
+        devices.find((d) => d.entry_id === wanted) ||
+        devices.find((d) => String(d.unique_id || "") === wanted) ||
+        devices.find((d) => String(d.info?.unique_id || "") === wanted) ||
+        devices.find((d) =>
+          String(d.title || "").toLowerCase().includes(wanted.toLowerCase())
+        );
+      if (match) {
+        this._entryId = match.entry_id;
+      } else if (!wanted) {
+        this._entryId = devices[0].entry_id;
+      } else {
+        this._resolveError =
+          `Gerät "${wanted}" nicht gefunden. IDs: ` +
+          devices
+            .map((d) => `${d.title} → ${d.entry_id}`)
+            .join(" · ");
+      }
+    } catch (err) {
+      this._resolveError = err.message || String(err);
+    }
   }
 
   async _ws(type, payload = {}) {
     return this._hass.connection.sendMessagePromise({
       type: `${DOMAIN}/${type}`,
-      entry_id: this._config.entry_id,
+      entry_id: this._entryId || this._config.entry_id,
       ...payload,
     });
   }
@@ -197,6 +243,19 @@ class UltimateControlPanel extends HTMLElement {
           </div>${tuneRows}`;
       })
       .join("");
+
+    if (this._resolveError) {
+      this.shadowRoot.innerHTML = `
+        <style>
+          ha-card { padding:14px; font-size:.88rem; color: var(--primary-text-color,#eee); }
+          .t { font-weight:600; margin-bottom:6px; }
+        </style>
+        <ha-card>
+          <div class="t">UltimateControl</div>
+          <div>${this._esc(this._resolveError)}</div>
+        </ha-card>`;
+      return;
+    }
 
     const crumb = (view.path || "…").split("/").filter(Boolean).join(" / ");
     const current = cur.name

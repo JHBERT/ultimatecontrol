@@ -51,7 +51,7 @@ CONF_FOLDER = "folder"
 CONF_SUBFOLDER = "subfolder"
 
 # The dashboard card; served as a module so a dashboard needs no file copy.
-PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0"
+PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.1"
 
 # Optional file name of the HVSC song length database inside the cache folder.
 # The raw ``Songlengths.md5`` is parsed, the JSON file (built with
@@ -134,11 +134,18 @@ async def async_unload_entry(
 
 
 class PanelView(HomeAssistantView):
-    """Serve the UltimateControl dashboard card as a JS module."""
+    """Serve the UltimateControl dashboard card as a JS module.
+
+    Home Assistant loads dashboard resources with a ``<script type="module">
+``, which a login-protected URL cannot satisfy - the browser's module loader
+    sends no auth header and the 401 makes the module fail silently. The card
+    therefore needs no auth: it is code, not data (every API call it makes is
+    authenticated, and it refuses to work without a real websocket connection).
+    """
 
     url = "/ultimatecontrol_panel/ultimatecontrol-panel.js"
     name = f"api:{DOMAIN}:panel"
-    requires_auth = True
+    requires_auth = False
 
     async def get(self, request):  # noqa: ANN001
         """Return the card."""
@@ -212,7 +219,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
 @callback
 def _async_serve_panel(hass: HomeAssistant) -> None:
-    """Register the card view and tell Home Assistant about the new resource."""
+    """Register the card view (idempotent: several entries share one view)."""
     if not hass.data.get(f"{DOMAIN}_panel_served"):
         hass.http.register_view(PanelView())
         hass.data[f"{DOMAIN}_panel_served"] = True
