@@ -1,102 +1,62 @@
-# Die Dashboard-Card einbauen (UltimateControl 0.4.0)
+# „Custom element doesn't exist" – was wirklich los war (0.4.1)
 
-Die Card wird **von der Integration selbst ausgeliefert** – du musst keine Datei
-nach `config/www` kopieren. Nötig sind drei Schritte: ZIP einspielen, Ressource
-eintragen, Card anlegen.
+## Was ich geändert hatte und warum es nicht half
+In 0.4.0 habe ich die Card über eine eigene View der Integration ausgeliefert
+(`/ultimatecontrol_panel/ultimatecontrol-panel.js`, `requires_auth = True`).
+Bei dir kann die Datei deshalb gar nicht geladen werden – also wird das Element
+nie definiert, und Lovelace sagt „Custom element doesn't exist“. Meine Anleitung
+(Schritt 2) war zusätzlich falsch, weil sie dich die Ressource eintragen ließ,
+ohne dass die Integration sie selbst mitregistriert.
 
-## 1. Integration aktualisieren
+## Woran es liegt (zwei Ursachen)
+1. **Die URL lag hinter dem Login.** Home Assistant lädt eine Dashboard-Ressource
+   als `<script type="module">`. Der Modul-Lader des Browsers schickt dabei keine
+   Auth-Header; ein 401 lässt das Modul still scheitern → Element fehlt.
+   (Dass dieselbe Datei im Browser-Direktaufruf 200 liefert, hat mich in die Irre
+   geführt: dort gibt es ein Cookie, im Modul-Loader nicht.)
+2. **`entry_id: 415204` ist nicht die Config-Entry-ID**, sondern die
+   `unique_id` des Geräts (die Firmware-Nummer). Damit wäre die Card auch nach
+   dem Laden mit „unknown_entry" stehen geblieben.
 
-Inhalt von `ultimatecontrol-0.4.0.zip` nach
-`config/custom_components/ultimatecontrol/` (Ordner ersetzen; neu sind
-`frontend/`, `library.py`, `websocket_api.py`, `services.yaml`), dann
-**Home Assistant neu starten**.
+## Was 0.4.1 macht
+- Die Card wird **ohne Auth** ausgeliefert (Code, keine Daten; jeder Aufruf, den
+  die Card macht, ist authentifiziert).
+- Die Card **sucht ihr Gerät selbst**: neuer Befehl `ultimatecontrol/devices`.
+  Sie akzeptiert die Config-Entry-ID, die `unique_id` (`415204`), Teile des
+  Namens – oder nimmt das einzige eingerichtete Gerät. Passt nichts, zeigt sie
+  die echten IDs an, statt nur „unknown_entry".
 
-Prüfen: Einstellungen → Geräte & Dienste → UltimateControl – die beiden Geräte
-müssen da sein, und unter *Entwicklerwerkzeuge → Aktionen* taucht
-`ultimatecontrol.import_folder` auf. Wenn nicht, wurde der Ordner nicht richtig
-ersetzt.
-
-## 2. Ressource eintragen
-
-Die Card ist ein JavaScript-Modul. Home Assistant muss wissen, wo es liegt.
-
-**Mit UI (Standard):** Einstellungen → Dashboards → oben rechts **⋮** →
-**Ressourcen** → **Ressource hinzufügen**
-
-```
-URL:  /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0
-Typ:  JavaScript-Modul
-```
-
-**Im YAML-Modus** (`configuration.yaml`):
-
-```yaml
-lovelace:
-  mode: yaml
-  resources:
-    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0
-      type: module
-```
-
-Danach einmal hart neu laden (Strg+F5). Fehlt die Ressource, zeigt das Dashboard
-nur „Custom element doesn't exist: ultimatecontrol-panel“.
-
-## 3. Geräte-ID heraussuchen
-
-Die Card braucht die ID deines Ultimate-2-Cartridge-Eintrags.
-
-Einstellungen → Geräte & Dienste → **UltimateControl** → auf den Eintrag
-„Ultimate 2 Cartridge" klicken. Die ID steht in der Adresszeile:
-
-```
-http://homeassistant.local:8123/config/integrations/integration/ultimatecontrol#config_entry=01JABCDEF...
-```
-
-Alles nach `config_entry=` ist die ID (`01JAB…`).
-
-## 4. Card aufs Dashboard
-
-Dashboard öffnen → **Bearbeiten** → **Karte hinzufügen** → unten
-**Manuell** (YAML) und einfügen:
+## Einbau
+1. ZIP-Inhalt nach `config/custom_components/ultimatecontrol/` (ersetzen),
+   Home Assistant neu starten.
+2. Ressource: Einstellungen → Dashboards → ⋮ → Ressourcen →
+   `/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.1`
+   Typ **JavaScript-Modul**. (Die Integration registriert sie nicht selbst –
+   das ist der eine Schritt, den nur du machen kannst.)
+3. Karte:
 
 ```yaml
 type: custom:ultimatecontrol-panel
-entry_id: 01JABCDEF...
+entry_id: 415204          # oder ganz weglassen
 title: Ultimate 2 Cartridge
 ```
 
-Speichern. Die Card zeigt oben rechts die Reiter **HVSC** und **★ Favoriten**.
+Beides ist jetzt gültig: die `unique_id` (`415204`) wird erkannt, und ohne
+`entry_id` nimmt die Card das einzige Gerät.
 
-## 5. Dateien bereitstellen
+## Woran du merkst, dass es geklappt hat
+- Beim Laden der Datei
+  `http://homeassistant.local:8123/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.1`
+  in einem **privaten Fenster ohne Login** kommt JavaScript (kein Login-Dialog,
+  keine 401).
+- Die Karte erscheint mit den Reitern „HVSC" und „★ Favoriten".
+- Kommt stattdessen eine Meldung mit „IDs:" – dort steht die richtige ID für
+  `entry_id`.
 
-| Was | Wohin |
-| --- | --- |
-| HVSC / Sammlung | `config/ultimatecontrol/sids` (Unterordner erlaubt) |
-| Favoriten | `config/ultimatecontrol/favorites` (füllt die Card selbst) |
-| Songlängen | `config/ultimatecontrol/Songlengths.md5` (aus dem HVSC: `DOCUMENTS/Songlengths.md5`) |
+---
 
-Ohne Songlängen-Datei bleibt die Länge leer („–“). Deinen eigenen
-Favoriten-Ordner einmalig setzen: UltimateControl → **Konfigurieren** →
-*Favourites folder* (z. B. `/config/media/favoriten`). Beim Speichern werden
-alle `.sid` daraus kopiert.
+## Ältere Fassung der Anleitung (0.4.0)
 
-Ordner in die Bibliothek holen:
-
-```yaml
-action: ultimatecontrol.import_folder
-data:
-  entry_id: 01JABCDEF...
-  folder: /config/media/phat - Test Set
-  subfolder: phat
-```
-
-## Wenn etwas nicht geht
-
-- **„Custom element doesn't exist“** – Ressource fehlt oder wurde nicht neu
-  geladen (Strg+F5 bzw. App neu starten).
-- **„entry_id fehlt“** – die ID aus Schritt 3 in die Card eintragen.
-- **Leere Liste** – in `config/ultimatecontrol/sids` liegen noch keine
-  `.sid`-Dateien, oder der Ordner hat die falschen Rechte (HA-Benutzer muss
-  lesen dürfen).
-- **„device_error“…** – das Gerät ist aus oder die IP hat sich geändert; die
-  Integration prüft das alle 30 Sekunden (Option *Status polling interval*).
+Die Schritte 1–3 oben gelten weiter; in 0.4.0 musste die Ressource manuell
+eingetragen werden, in 0.4.1 zusätzlich `?version=0.4.1`, und `entry_id` ist
+optional.

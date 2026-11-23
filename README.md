@@ -16,7 +16,7 @@ Remote Control* enabled in the Ultimate menu) and gives you:
   being reported as playing when the tune is over,
 * a **config flow**: set the device up in the UI, no YAML.
 
-## SID-Auswahl im Dashboard (0.4.0)
+## SID-Auswahl im Dashboard (ab 0.4.0)
 
 Die Integration bringt eine eigene Lovelace-Card mit: HVSC durchsuchen, einen
 Tune wählen, auf dem C64 abspielen, Favoriten pflegen.
@@ -25,9 +25,13 @@ Tune wählen, auf dem C64 abspielen, Favoriten pflegen.
 
 ```yaml
 type: custom:ultimatecontrol-panel
-entry_id: <ID des Geräts>      # Einstellungen → Geräte → Ultimate → ID
+entry_id: <ID des Geräts>      # optional; sonst nimmt die Card das einzige Gerät
 title: Ultimate 2 Cartridge
 ```
+
+`entry_id` akzeptiert die Config-Entry-ID, die `unique_id` des Geräts (z. B.
+`415204`) oder einen Teil des Namens; ohne Angabe wird das einzige eingerichtete
+Gerät genommen.
 
 Die Card wird von der Integration selbst ausgeliefert
 (`/ultimatecontrol_panel/ultimatecontrol-panel.js`). Wenn dein Dashboard im
@@ -36,7 +40,7 @@ YAML-Modus läuft, als Ressource eintragen:
 ```yaml
 lovelace:
   resources:
-    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.0
+    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.1
       type: module
 ```
 
