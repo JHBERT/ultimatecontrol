@@ -16,6 +16,19 @@ Remote Control* enabled in the Ultimate menu) and gives you:
   being reported as playing when the tune is over,
 * a **config flow**: set the device up in the UI, no YAML.
 
+
+### Karte konfigurieren (ab 0.5.0)
+Beim Hinzufügen der Karte öffnet sich ein Dialog mit einem **Geräte-Dropdown**
+(alle eingerichteten Ultimates, „Automatisch“ = erstes Gerät) und einem
+Titel-Feld. In YAML bleibt `entry_id` optional.
+
+### SIDs importieren (ab 0.5.0)
+Der Knopf **＋** in der Karte öffnet einen Ordner-Browser für den
+Home-Assistant-Rechner: mit `↑` nach oben, Ordner antippen, unten steht, wie viele
+SID-Dateien drin liegen; „Diesen Ordner importieren“ kopiert sie (samt
+Unterordnern) in die Bibliothek. Derselbe Vorgang per Service:
+`ultimatecontrol.import_folder`.
+
 ## SID-Auswahl im Dashboard (ab 0.4.0)
 
 Die Integration bringt eine eigene Lovelace-Card mit: HVSC durchsuchen, einen
@@ -42,7 +55,7 @@ dein Dashboard im YAML-Modus läuft, gehört die Ressource in deine
 ```yaml
 lovelace:
   resources:
-    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.2
+    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.5.0
       type: module
 ```
 

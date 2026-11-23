@@ -117,6 +117,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_favorite_add)
     websocket_api.async_register_command(hass, ws_favorite_remove)
     websocket_api.async_register_command(hass, ws_import)
+    websocket_api.async_register_command(hass, ws_host_folders)
     websocket_api.async_register_command(hass, ws_play)
     websocket_api.async_register_command(hass, ws_current)
     hass.http.register_view(UltimateSidView(hass))
@@ -277,6 +278,88 @@ async def ws_import(
         msg["id"],
         {"imported": len(imported), "skipped": skipped[:50], "files": imported[:50]},
     )
+
+
+# ----------------------------------------------------------------------
+# importing
+# ----------------------------------------------------------------------
+# Folders a Home Assistant installation usually has, offered first in the
+# import dialog. Only those that exist are returned.
+_IMPORT_ROOTS = ("/config", "/share", "/media", "/ssl", "/backup", "/addons", "/local")
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/host_folders",
+        vol.Required("entry_id"): str,
+        vol.Optional("path"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_host_folders(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List the folders of the Home Assistant host, for the import dialog.
+
+    Without a path the usual roots are offered; with a path its sub folders,
+    so the user picks a folder instead of typing an absolute path.
+    """
+    _runtime(hass, msg["entry_id"])
+    path = (msg.get("path") or "").strip()
+
+    def _list() -> dict[str, Any]:
+        if not path:
+            roots = [Path(item) for item in _IMPORT_ROOTS]
+            # A Home Assistant Core installation keeps /config elsewhere.
+            config_dir = Path(hass.config.config_dir)
+            if config_dir not in roots:
+                roots.insert(0, config_dir)
+            existing = [item for item in roots if item.is_dir()]
+            return {
+                "path": "",
+                "parent": None,
+                "entries": [
+                    {"name": str(item), "path": str(item), "is_dir": True}
+                    for item in existing
+                ],
+                "sid_count": None,
+            }
+
+        folder = Path(path).expanduser()
+        if not folder.is_dir():
+            raise SidLibraryError(f"Not a folder: {folder}")
+        entries: list[dict[str, Any]] = []
+        sid_count = 0
+        try:
+            children = sorted(folder.iterdir(), key=lambda item: item.name.lower())
+        except OSError as err:
+            raise SidLibraryError(str(err)) from err
+        for child in children:
+            if child.name.startswith("."):
+                continue
+            try:
+                if child.is_dir():
+                    entries.append(
+                        {"name": child.name, "path": str(child), "is_dir": True}
+                    )
+                elif child.suffix.lower() == ".sid":
+                    sid_count += 1
+            except OSError:
+                continue
+        parent = str(folder.parent) if folder.parent != folder else ""
+        return {
+            "path": str(folder),
+            "parent": parent,
+            "entries": entries,
+            "sid_count": sid_count,
+        }
+
+    try:
+        result = await hass.async_add_executor_job(_list)
+    except SidLibraryError as err:
+        connection.send_error(msg["id"], "invalid_path", str(err))
+        return
+    connection.send_result(msg["id"], result)
 
 
 # ----------------------------------------------------------------------

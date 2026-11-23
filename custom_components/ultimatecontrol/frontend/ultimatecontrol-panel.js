@@ -12,6 +12,119 @@
  */
 const DOMAIN = "ultimatecontrol";
 
+/* ------------------------------------------------------------------
+ * Konfigurations-Dialog der Karte
+ * ------------------------------------------------------------------
+ * Ohne Editor kann eine Karte in der Oberfläche nur als YAML eingefügt
+ * werden. Mit `getConfigElement` bekommt sie ein Formular mit einem
+ * Geräte-Dropdown, damit man bei mehreren Ultimates das richtige wählt.
+ */
+class UltimateControlPanelEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = { ...config };
+    this._render();
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._loadDevices();
+  }
+
+  async _loadDevices() {
+    try {
+      this._devices = await this._hass.connection.sendMessagePromise({
+        type: `${DOMAIN}/devices`,
+      });
+    } catch (err) {
+      this._devices = [];
+      this._deviceError = err.message || String(err);
+    }
+    this._render();
+  }
+
+  _fire() {
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  _set(key, value) {
+    this._config = { ...this._config, [key]: value };
+    if (!value) delete this._config[key];
+    this._fire();
+  }
+
+  _render() {
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const cfg = this._config || {};
+    const devices = this._devices || [];
+    const options = devices
+      .map((device) => {
+        const label = `${device.title || device.entry_id}${
+          device.host ? ` (${device.host})` : ""
+        }`;
+        const selected =
+          device.entry_id === cfg.entry_id ||
+          String(device.unique_id || "") === String(cfg.entry_id || "") ||
+          (!cfg.entry_id && devices.length === 1);
+        return `<option value="${this._esc(device.entry_id)}" ${
+          selected ? "selected" : ""
+        }>${this._esc(label)}</option>`;
+      })
+      .join("");
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        .form { display:flex; flex-direction:column; gap:12px; padding:4px 2px 8px; }
+        label { font-size:.85rem; color: var(--secondary-text-color,#999); display:block; margin-bottom:4px; }
+        select, input {
+          width:100%; box-sizing:border-box; font:inherit; padding:8px 10px; border-radius:8px;
+          border:1px solid var(--divider-color,#444); background: var(--card-background-color,#1c1c1c);
+          color: var(--primary-text-color,#eee);
+        }
+        .hint { font-size:.78rem; color: var(--secondary-text-color,#888); }
+      </style>
+      <div class="form">
+        <div>
+          <label for="device">Gerät</label>
+          <select id="device">
+            <option value="">Automatisch (erstes Gerät)</option>
+            ${options}
+          </select>
+          <div class="hint">${
+            devices.length
+              ? `${devices.length} Gerät(e) eingerichtet.`
+              : this._deviceError || "Noch keine Geräte gefunden."
+          }</div>
+        </div>
+        <div>
+          <label for="title">Titel</label>
+          <input id="title" type="text" value="${this._esc(cfg.title || "SID-Auswahl")}" />
+        </div>
+      </div>`;
+
+    this.shadowRoot.querySelector("#device").addEventListener("change", (event) =>
+      this._set("entry_id", event.target.value)
+    );
+    this.shadowRoot.querySelector("#title").addEventListener("change", (event) =>
+      this._set("title", event.target.value)
+    );
+  }
+
+  _esc(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
+  }
+}
+
+customElements.define("ultimatecontrol-panel-editor", UltimateControlPanelEditor);
+
 class UltimateControlPanel extends HTMLElement {
   setConfig(config) {
     // entry_id darf fehlen: die Card sucht sich das Gerät dann selbst.
@@ -40,6 +153,16 @@ class UltimateControlPanel extends HTMLElement {
 
   getCardSize() {
     return 8;
+  }
+
+  /* Der Konfigurations-Dialog der Karte (Geräte-Dropdown + Titel). */
+  static getConfigElement() {
+    return document.createElement("ultimatecontrol-panel-editor");
+  }
+
+  /* Vorschlag, wenn die Karte über „Karte hinzufügen“ eingefügt wird. */
+  static getStubConfig(hass) {
+    return { title: "SID-Auswahl" };
   }
 
   /* -------------------------------------------------- Laden */
@@ -200,6 +323,60 @@ class UltimateControlPanel extends HTMLElement {
     this._load();
   }
 
+  /* -------------------------------------------------- Import */
+  async _openImport() {
+    this._import = { path: "", parent: null, entries: [], sidCount: null, busy: false };
+    this._render();
+    await this._importGo("");
+  }
+
+  async _importGo(path) {
+    if (!this._import) return;
+    this._import.busy = true;
+    this._render();
+    try {
+      const result = await this._ws("host_folders", path ? { path } : {});
+      this._import = {
+        path: result.path,
+        parent: result.parent,
+        entries: result.entries || [],
+        sidCount: result.sid_count,
+        busy: false,
+      };
+      this._error = null;
+    } catch (err) {
+      this._import.busy = false;
+      this._error = err.message || String(err);
+    }
+    this._render();
+  }
+
+  async _importRun() {
+    if (!this._import || !this._import.path) return;
+    this._import.busy = true;
+    this._render();
+    try {
+      const result = await this._ws("import", { folder: this._import.path });
+      this._flash = `${result.imported} SID-Datei(en) importiert`;
+      if (result.skipped && result.skipped.length) {
+        this._error = `${result.skipped.length} übersprungen: ${result.skipped[0]}`;
+      }
+      this._import = null;
+      this._view = { source: "library", path: "" };
+      await this._load();
+      return;
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
+    if (this._import) this._import.busy = false;
+    this._render();
+  }
+
+  _importClose() {
+    this._import = null;
+    this._render();
+  }
+
   /* -------------------------------------------------- Darstellung */
   _fmtLength(seconds) {
     if (!seconds && seconds !== 0) return "–";
@@ -254,6 +431,71 @@ class UltimateControlPanel extends HTMLElement {
           <div class="t">UltimateControl</div>
           <div>${this._esc(this._resolveError)}</div>
         </ha-card>`;
+      return;
+    }
+
+    if (this._import) {
+      const imp = this._import;
+      const rows = imp.entries
+        .map(
+          (entry) => `<div class="row dir" data-imp="${this._esc(entry.path)}">
+            <span class="icon">📁</span><span class="name">${this._esc(entry.name)}</span>
+          </div>`
+        )
+        .join("");
+      const count =
+        imp.sidCount === null || imp.sidCount === undefined
+          ? ""
+          : `<div class="hint">${imp.sidCount} SID-Datei(en) in diesem Ordner (Unterordner werden mit importiert)</div>`;
+      this.shadowRoot.innerHTML = `
+        <style>
+          :host { display:block; }
+          ha-card { padding: 12px 14px 14px; }
+          .head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+          .title { font-size:1.05rem; font-weight:600; flex:1; }
+          .path { font-size:.78rem; color: var(--secondary-text-color,#999); margin-bottom:6px;
+                  display:flex; align-items:center; gap:8px; word-break:break-all; }
+          .list { max-height: 300px; overflow-y:auto; }
+          .row { display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:6px;
+                 cursor:pointer; font-size:.92rem; }
+          .row:hover { background: rgba(127,127,127,.12); }
+          .row .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .hint { font-size:.78rem; color: var(--secondary-text-color,#999); margin:8px 0; }
+          .actions { display:flex; gap:8px; margin-top:10px; }
+          .actions button { font:inherit; font-size:.85rem; padding:6px 14px; border-radius:16px;
+                            border:1px solid var(--divider-color,#444); background:transparent;
+                            color: var(--primary-text-color,#eee); cursor:pointer; }
+          .actions button.primary { background: var(--primary-color,#03a9f4);
+                                    border-color:transparent; color:#fff; }
+          .actions button:disabled { opacity:.45; cursor:default; }
+          .msg { font-size:.8rem; margin-top:6px; }
+          .msg.err { color: var(--error-color,#f44336); }
+        </style>
+        <ha-card>
+          <div class="head"><div class="title">SIDs importieren</div></div>
+          <div class="path">
+            ${imp.parent !== null ? `<button class="up">↑</button>` : ""}
+            <span>${this._esc(imp.path || "Ordner auf dem Home-Assistant-Rechner")}</span>
+          </div>
+          <div class="list">${rows || `<div class="hint">Keine Unterordner.</div>`}</div>
+          ${count}
+          <div class="actions">
+            <button class="primary" id="impRun" ${imp.path && !imp.busy ? "" : "disabled"}>
+              ${imp.busy ? "…" : "Diesen Ordner importieren"}
+            </button>
+            <button id="impCancel">Abbrechen</button>
+          </div>
+          ${this._error ? `<div class="msg err">${this._esc(this._error)}</div>` : ""}
+        </ha-card>`;
+
+      const root = this.shadowRoot;
+      root.querySelectorAll("[data-imp]").forEach((el) =>
+        el.addEventListener("click", () => this._importGo(el.dataset.imp))
+      );
+      const up = root.querySelector(".up");
+      if (up) up.addEventListener("click", () => this._importGo(imp.parent || ""));
+      root.querySelector("#impRun").addEventListener("click", () => this._importRun());
+      root.querySelector("#impCancel").addEventListener("click", () => this._importClose());
       return;
     }
 
@@ -313,6 +555,7 @@ class UltimateControlPanel extends HTMLElement {
           <div class="tabs">
             <button data-src="library" class="${view.source !== "favorites" ? "on" : ""}">HVSC</button>
             <button data-src="favorites" class="${view.source === "favorites" ? "on" : ""}">★ Favoriten</button>
+            <button data-import="1" title="SID-Ordner vom Home-Assistant-Rechner importieren">＋</button>
           </div>
         </div>
         <div class="path">
@@ -352,6 +595,8 @@ class UltimateControlPanel extends HTMLElement {
     if (up) up.addEventListener("click", () => this._up());
     const fav = root.querySelector("#fav");
     if (fav) fav.addEventListener("click", () => this._favorite());
+    const imp = root.querySelector("[data-import]");
+    if (imp) imp.addEventListener("click", () => this._openImport());
   }
 
   _esc(value) {
