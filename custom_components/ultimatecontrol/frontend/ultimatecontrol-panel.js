@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.6.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.6.1
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -77,8 +77,6 @@ class UltimateControlPanelEditor extends HTMLElement {
         }>${this._esc(label)}</option>`;
       })
       .join("");
-
-    const hvscBar = this._hvscBar();
 
     this.shadowRoot.innerHTML = `
       <style>
