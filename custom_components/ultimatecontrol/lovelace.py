@@ -18,13 +18,21 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.lovelace import DOMAIN as LOVELACE_DOMAIN
-from homeassistant.components.lovelace.resources import ResourceStorageCollection
+from typing import TYPE_CHECKING
+
 from homeassistant.core import HomeAssistant, callback
+
+if TYPE_CHECKING:
+    from homeassistant.components.lovelace.resources import ResourceStorageCollection
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# Same string as homeassistant.components.lovelace.const.LOVELACE_DATA: Home
+# Assistant stores the dashboards under hass.data["lovelace"]. Importing the
+# constant would pull the whole Lovelace component into our setup.
+LOVELACE_DOMAIN = "lovelace"
 
 
 @callback
@@ -55,7 +63,7 @@ def async_ensure_resource(hass: HomeAssistant, url: str) -> None:
 
 
 async def _async_ensure_resource(
-    hass: HomeAssistant, resources: ResourceStorageCollection, url: str
+    hass: HomeAssistant, resources: "ResourceStorageCollection", url: str
 ) -> None:
     """Wait for the resource collection, then add the URL if it is missing."""
     # The collection loads lazily; without this the list is empty on a fresh

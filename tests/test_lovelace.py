@@ -55,12 +55,10 @@ def _load_lovelace():
         sys.modules[name] = module
         return module
 
-    for name in ("homeassistant", "homeassistant.components", "homeassistant.components.lovelace"):
+    for name in ("homeassistant", "homeassistant.components"):
         if name not in sys.modules:
             mod(name)
-    mod("homeassistant.components.lovelace.resources", ResourceStorageCollection=FakeResources)
     mod("homeassistant.core", HomeAssistant=object, callback=lambda f: f)
-    sys.modules["homeassistant.components.lovelace"].DOMAIN = "lovelace"
 
     const = types.ModuleType("ultimatecontrol.const")
     const.DOMAIN = "ultimatecontrol"
