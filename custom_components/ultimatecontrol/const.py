@@ -21,6 +21,10 @@ DEFAULT_TIMEOUT = 10  # seconds for ordinary REST calls
 # has reset and DMA-loaded the file, which takes several seconds.
 RUNNER_TIMEOUT = 30
 
+# The SID player reads at most 512 bytes of a song length file: two packed BCD
+# bytes (minutes, seconds) per sub tune, 256 sub tunes at most.
+MAX_SSL_BYTES = 512
+
 # Sub-directory of the Home Assistant config dir: the local SID library
 # (``sids``), the favourites (``favorites``) and the song length database.
 SID_CACHE_DIR = "ultimatecontrol"

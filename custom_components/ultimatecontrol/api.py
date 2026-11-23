@@ -27,9 +27,15 @@ import logging
 from typing import Any
 from urllib.parse import quote
 
-from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
+from aiohttp import (
+    ClientError,
+    ClientResponse,
+    ClientSession,
+    ClientTimeout,
+    FormData,
+)
 
-from .const import DEFAULT_PORT, DEFAULT_TIMEOUT, RUNNER_TIMEOUT
+from .const import DEFAULT_PORT, DEFAULT_TIMEOUT, MAX_SSL_BYTES, RUNNER_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,12 +107,13 @@ class UltimateApi:
         params: dict[str, Any] | None = None,
         data: bytes | None = None,
         content_type: str | None = None,
+        form: Any = None,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> dict[str, Any]:
         """Perform one API call and return the decoded JSON body."""
         url = f"{self._base}{path}"
         headers = self._headers()
-        if content_type:
+        if content_type and form is None:
             headers["Content-Type"] = content_type
 
         try:
@@ -115,7 +122,7 @@ class UltimateApi:
                     method,
                     url,
                     params=params,
-                    data=data,
+                    data=form if form is not None else data,
                     headers=headers,
                     timeout=ClientTimeout(total=timeout),
                 ) as resp:
@@ -405,12 +412,48 @@ class UltimateApi:
         )
 
     async def async_upload_and_play_sid(
-        self, sid_bytes: bytes, song_nr: int | None = None
+        self,
+        sid_bytes: bytes,
+        song_nr: int | None = None,
+        song_lengths: bytes | None = None,
     ) -> None:
-        """Upload SID bytes to the device and play them in one POST."""
+        """Upload SID bytes (and optionally its song lengths) and play them.
+
+        The SID goes as the first ``file`` part of a multipart upload; an
+        optional second ``file`` part carries the per-SID ``.ssl`` length array
+        the firmware's SID player reads for its documented play time. Without
+        that second part the player falls back to its five minute default.
+        """
         params: dict[str, Any] = {}
         if song_nr is not None:
             params["songnr"] = song_nr
+        if song_lengths:
+            if len(song_lengths) > MAX_SSL_BYTES:
+                raise UltimateApiError(
+                    f"Song length payload of {len(song_lengths)} bytes exceeds the "
+                    f"{MAX_SSL_BYTES} byte limit the device accepts"
+                )
+            form = FormData()
+            form.add_field(
+                "file",
+                sid_bytes,
+                filename="tune.sid",
+                content_type="application/octet-stream",
+            )
+            form.add_field(
+                "file",
+                song_lengths,
+                filename="tune.ssl",
+                content_type="application/octet-stream",
+            )
+            await self._request(
+                "POST",
+                "/v1/runners:sidplay",
+                params=params,
+                form=form,
+                timeout=RUNNER_TIMEOUT,
+            )
+            return
         await self._request(
             "POST",
             "/v1/runners:sidplay",

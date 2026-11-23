@@ -166,3 +166,40 @@ class SongLengthsDatabase:
         if not lengths or song_nr < 0 or song_nr >= len(lengths):
             return None
         return lengths[song_nr]
+
+
+def bcd_byte(value: int) -> int:
+    """Encode a number from 0 to 99 as one packed BCD byte."""
+    value = max(0, min(99, int(value)))
+    return ((value // 10) << 4) | (value % 10)
+
+
+def build_ssl_payload(lengths: list[float], songs: int) -> bytes | None:
+    """Build the ``.ssl`` length array the Ultimate's SID player reads.
+
+    The device wants two packed BCD bytes per sub tune - minutes, then seconds -
+    and reads at most 512 bytes, i.e. 256 sub tunes. Sub tunes without a known
+    length become ``00 00``, which makes the player keep its own default for
+    them. Returns ``None`` when nothing is known, so no attachment is sent.
+    """
+    if not lengths or songs < 1:
+        return None
+    payload = bytearray()
+    for index in range(min(songs, 256)):
+        if index >= len(lengths):
+            payload.extend((0, 0))
+            continue
+        total = int(round(float(lengths[index])))
+        minutes, seconds = divmod(max(total, 0), 60)
+        if minutes > 99:
+            minutes, seconds = 99, 59
+        payload.extend((bcd_byte(minutes), bcd_byte(seconds)))
+    return bytes(payload) if any(payload) else None
+
+
+def ssl_payload_for(sid_bytes: bytes, database: SongLengthsDatabase) -> bytes | None:
+    """Build the length array for SID bytes, or ``None`` when unknown."""
+    lengths = database.get_all_lengths(sid_bytes)
+    if not lengths:
+        return None
+    return build_ssl_payload(lengths, count_subtunes(sid_bytes))

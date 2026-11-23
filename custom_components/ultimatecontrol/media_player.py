@@ -43,6 +43,7 @@ from .const import (
     SONG_SEPARATOR,
 )
 from .runtime_data import UltimateControlConfigEntry, UltimateControlRuntimeData
+from .songlengths import ssl_payload_for
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -270,14 +271,22 @@ class UltimateMediaPlayer(MediaPlayerEntity):
         RAM disk for a SID, so a file that is not on the device is streamed to
         the ``sidplay`` runner in one POST instead of being uploaded first.
         """
+        data: bytes | None = None
+        duration: int | None = None
         async with self._lock:
             # Only a plain path is looked at locally: a device path such as
             # /Usb0/song.sid must never be read from (or found on) this host.
             local_file = Path(path) if not path.startswith("/") else None
             if local_file is not None and local_file.is_file():
                 data = await self.hass.async_add_executor_job(local_file.read_bytes)
+                # The length goes two ways: with the upload, so the device's own
+                # player knows it, and as a timer here, so the entity returns to
+                # idle when the tune ends.
+                duration = self._length_of(data, song)
                 await self._async_call(
-                    self._runtime.api.async_upload_and_play_sid(data, song)
+                    self._runtime.api.async_upload_and_play_sid(
+                        data, song, ssl_payload_for(data, self._runtime.songlengths)
+                    )
                 )
             else:
                 await self._async_call(
@@ -287,7 +296,7 @@ class UltimateMediaPlayer(MediaPlayerEntity):
         self._current_path = path
         self._current_song = song
         self._attr_media_content_type = MediaType.MUSIC
-        self._attr_media_duration = self._lookup_duration(path, song)
+        self._attr_media_duration = duration
         self._set_state(MediaPlayerState.PLAYING, path)
         self._schedule_stop(self._attr_media_duration)
 
@@ -296,12 +305,16 @@ class UltimateMediaPlayer(MediaPlayerEntity):
         local_file = Path(path)
         if not local_file.is_file():
             return None
-        lengths = self._runtime.songlengths
-        if lengths.is_empty:
-            return None
         try:
             data = local_file.read_bytes()
         except OSError:
+            return None
+        return self._length_of(data, song)
+
+    def _length_of(self, data: bytes, song: int | None) -> int | None:
+        """Return a SID's length in seconds from the database, by file hash."""
+        lengths = self._runtime.songlengths
+        if lengths.is_empty:
             return None
         length = lengths.get_length(data, (song or 1) - 1)
         return int(length) if length else None

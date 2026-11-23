@@ -29,7 +29,7 @@ from .api import UltimateApiError, UltimateConnectionError
 from .const import CONF_HOST, CONF_PORT, DEFAULT_PORT, DOMAIN
 from .library import SidLibrary, SidLibraryError
 from .runtime_data import UltimateControlRuntimeData
-from .songlengths import count_subtunes
+from .songlengths import count_subtunes, ssl_payload_for
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -426,7 +426,11 @@ async def ws_play(
             # hash and goes to the dashboard with the answer.
             md5 = library.inspect(local_path).md5
             length = runtime.songlengths.length_of(md5, (song or 1) - 1)
-            await api.async_upload_and_play_sid(data, song)
+            # The device's SID player only knows a tune's play time when the
+            # length array travels with the upload; without it, it plays five
+            # minutes.
+            ssl_payload = ssl_payload_for(data, runtime.songlengths)
+            await api.async_upload_and_play_sid(data, song, ssl_payload)
             runtime.last_played = {
                 "name": local_path.name,
                 "path": msg["path"],

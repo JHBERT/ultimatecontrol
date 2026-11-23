@@ -196,3 +196,32 @@ async def test_list_directory_normalises_shapes(client):
         {"errors": [], "Games": {"type": "dir"}, "D64": {"type": "dir"}}
     )
     assert [e["name"] for e in entries] == ["Games", "D64"]
+
+
+async def test_sidplay_upload_sends_the_song_lengths_as_a_second_part(client):
+    api, fake = client
+    ssl = bytes([0x05, 0x17, 0x01, 0x00])
+    await api.async_upload_and_play_sid(b"PSID" + b"\x00" * 60, 2, ssl)
+    request = fake.requests[-1]
+    assert request["method"] == "POST"
+    assert request["path"] == "/v1/runners:sidplay"
+    assert request["query"] == {"songnr": "2"}
+    assert request["content_type"].startswith("multipart/form-data")
+    # Both parts are counted in the body: the SID and the length array.
+    assert request["body_len"] > len(ssl) + 64
+
+
+async def test_sidplay_upload_without_lengths_is_a_plain_body(client):
+    api, fake = client
+    await api.async_upload_and_play_sid(b"PSID" + b"\x00" * 60)
+    request = fake.requests[-1]
+    assert request["content_type"] == "application/octet-stream"
+    assert request["body_len"] == 64
+
+
+async def test_an_oversized_length_array_is_refused_before_sending(client):
+    api, fake = client
+    before = len(fake.requests)
+    with pytest.raises(api_module.UltimateApiError):
+        await api.async_upload_and_play_sid(b"PSID", None, b"\x00" * 513)
+    assert len(fake.requests) == before
