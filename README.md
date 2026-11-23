@@ -200,3 +200,15 @@ pytest -q
 The tests in `tests/` start a small aiohttp server that answers like an
 Ultimate device, so the API client, the request it builds and the song length
 parser are covered without hardware and without Home Assistant.
+
+## Lizenz
+
+UltimateControl steht unter der **GNU General Public License v3.0** – siehe
+[`LICENSE`](LICENSE). Kurz gesagt: benutzen, verändern und weitergeben ist
+erlaubt; wer es weitergibt, muss den Quelltext offenlegen und die Lizenz
+mitgeben.
+
+Was von anderen stammt (Schnittstellen, Formate, Daten, Anregungen) und was
+nicht, steht in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Kurz:
+**kein fremder Code im Repository**, keine mitgelieferten Fremdbibliotheken,
+keine HVSC-Daten im Paket.
