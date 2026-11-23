@@ -1,0 +1,54 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ultimate II+ / Ultimate 64",
+        "description": "Enter the network address of your Ultimate device. Web Remote Control must be enabled in the Ultimate menu.",
+        "data": {
+          "host": "Host or IP address",
+          "port": "Port",
+          "password": "Network password (optional)",
+          "name": "Name"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the Ultimate II+ cartridge or Ultimate 64.",
+          "port": "HTTP port of the REST API, 80 by default.",
+          "password": "Only needed if a network password is set on the device (firmware 3.12+).",
+          "name": "Name of the device in Home Assistant."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ultimate network password",
+        "description": "The Ultimate refused the request. Enter the current network password.",
+        "data": {
+          "password": "Network password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the device. Check host, port and that the device is switched on.",
+      "invalid_auth": "The network password was refused (HTTP 403).",
+      "not_an_ultimate": "The host answered, but it does not look like an Ultimate device."
+    },
+    "abort": {
+      "already_configured": "This Ultimate device is already configured.",
+      "reauth_successful": "The network password was updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "UltimateControl options",
+        "description": "Polling interval for the device status, and the network password.",
+        "data": {
+          "scan_interval": "Status polling interval",
+          "password": "Network password (leave empty to keep)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the device.",
+      "invalid_auth": "The network password was refused (HTTP 403)."
+    }
+  }
+}

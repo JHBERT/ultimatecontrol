@@ -1,11 +1,13 @@
 {
   "domain": "ultimatecontrol",
   "name": "UltimateControl C64",
-  "version": "0.0.1",
+  "codeowners": ["@JHBERT"],
+  "config_flow": true,
+  "dependencies": ["media_source", "http"],
   "documentation": "https://github.com/JHBERT/ultimatecontrol",
-  "requirements": [],
-  "dependencies": [],
-  "codeowners": [],
+  "integration_type": "device",
   "iot_class": "local_polling",
-  "config_flow": true
+  "issue_tracker": "https://github.com/JHBERT/ultimatecontrol/issues",
+  "requirements": [],
+  "version": "0.2.0"
 }
