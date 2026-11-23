@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
@@ -40,6 +41,8 @@ class QueueItem:
     name: str = ""
     song: int = 1
     length: float | None = None
+    # The tune the SID asks for first (its "main" tune); 0 when not known.
+    start_song: int = 0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> QueueItem:
@@ -52,6 +55,7 @@ class QueueItem:
             name=str(data.get("name") or str(data["path"]).rsplit("/", 1)[-1]),
             song=max(1, song),
             length=float(length) if length else None,
+            start_song=max(0, int(data.get("start_song") or 0)),
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -62,6 +66,7 @@ class QueueItem:
             "name": self.name,
             "song": self.song,
             "length": self.length,
+            "start_song": self.start_song,
         }
 
 
@@ -74,6 +79,9 @@ class QueueState:
     playing: bool = False
     # Seconds the current tune plays; None when no timer runs.
     remaining: float | None = None
+    # When the timer fires, as a Unix timestamp, so a freshly opened dashboard
+    # can show the running tune and the time left without asking the C64.
+    ends_at: float | None = None
     # Set by the dashboard to name the folder the queue came from.
     title: str = ""
     task: asyncio.Task | None = None
@@ -86,6 +94,7 @@ class QueueState:
             "index": self.index,
             "count": len(self.items),
             "remaining": round(self.remaining, 1) if self.remaining else None,
+            "ends_at": self.ends_at,
             "items": [item.as_dict() for item in self.items],
         }
 
@@ -98,6 +107,7 @@ class QueuePlayer:
         play: Callable[[QueueItem], Awaitable[None]],
         length_of: Callable[[QueueItem], Awaitable[float | None]] | None = None,
         factory: Callable[..., asyncio.Task] | None = None,
+        start_song_of: Callable[[QueueItem], Awaitable[int]] | None = None,
     ) -> None:
         """Set up the player.
 
@@ -110,6 +120,9 @@ class QueuePlayer:
         # Home Assistant wants background work created through the hass so it
         # survives and is stopped on shutdown; plain asyncio is the fallback.
         self._factory = factory or (lambda coro: asyncio.get_running_loop().create_task(coro))
+        # A tune's "main" sub tune comes from its SID header; the queue plays
+        # that one, not always the first.
+        self._start_song = start_song_of
         self.state = QueueState()
         self._generation = 0
 
@@ -174,12 +187,14 @@ class QueuePlayer:
         self.cancel()
         self.state.playing = False
         self.state.remaining = None
+        self.state.ends_at = None
         return self.state
 
     def cancel(self) -> None:
         """Cancel the timer without touching the position."""
         task = self.state.task
         self.state.task = None
+        self.state.ends_at = None
         self._generation += 1
         if task is not None and not task.done():
             task.cancel()
@@ -195,6 +210,15 @@ class QueuePlayer:
             return
         self.cancel()
         generation = self._generation
+        if item.start_song == 0 and self._start_song is not None:
+            try:
+                item.start_song = await self._start_song(item)
+            except Exception:  # noqa: BLE001 - unknown means "first tune"
+                item.start_song = 1
+            # A folder or playlist entry that was never told a tune plays the
+            # SID's own main tune.
+            if item.song == 1:
+                item.song = max(1, item.start_song)
         if item.length is None and self._length_of is not None:
             try:
                 item.length = await self._length_of(item)
@@ -209,6 +233,7 @@ class QueuePlayer:
             raise
         self.state.playing = True
         self.state.remaining = self._delay(item)
+        self.state.ends_at = time.time() + self.state.remaining
         self.state.task = self._factory(self._run(generation, self.state.remaining))
 
     @staticmethod

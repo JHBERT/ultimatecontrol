@@ -29,7 +29,7 @@ from .api import UltimateApiError, UltimateConnectionError
 from .const import CONF_HOST, CONF_PORT, DEFAULT_PORT, DOMAIN
 from .library import SidLibrary, SidLibraryError
 from .runtime_data import UltimateControlRuntimeData
-from .songlengths import count_subtunes, ssl_payload_for
+from .songlengths import count_subtunes, ssl_payload_for, start_song
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -216,6 +216,7 @@ async def ws_inspect(
             "name": info.name,
             "path": msg["path"],
             "songs": info.songs,
+            "start_song": info.start_song,
             "lengths": info.lengths,
             "duration": info.duration,
             "md5": info.md5,
@@ -456,6 +457,11 @@ async def ws_play(
                     f"{local_path.name} has {songs} tune(s), not {song}",
                 )
                 return
+            # Without a tune number the SID's own main tune plays, not always
+            # the first one.
+            start = start_song(data)
+            if song is None:
+                song = start if start <= songs else 1
             # The song length is taken from the HVSC database by the file's
             # hash and goes to the dashboard with the answer.
             md5 = library.inspect(local_path).md5
@@ -472,6 +478,7 @@ async def ws_play(
                 "song": song or 1,
                 "songs": songs,
                 "length": length,
+                "start_song": start,
             }
         else:
             if song is not None:
@@ -651,9 +658,24 @@ def queue_for(runtime: UltimateControlRuntimeData) -> Any:
         length = runtime.songlengths.get_length(data, item.song - 1)
         return float(length) if length else None
 
+    async def _start_song_of(item: Any) -> int:
+        """Return the sub tune a SID wants played first."""
+        library = _library(runtime)
+        try:
+            path = await asyncio.get_running_loop().run_in_executor(
+                None, library.find, item.source, item.path
+            )
+            data = await asyncio.get_running_loop().run_in_executor(
+                None, path.read_bytes
+            )
+        except (SidLibraryError, OSError):
+            return 1
+        return start_song(data)
+
     runtime.queue = QueuePlayer(
         _play_queue_item(runtime),
         length_of=_length_of,
+        start_song_of=_start_song_of,
     )
     return runtime.queue
 
@@ -689,12 +711,12 @@ def _play_queue_item(runtime: UltimateControlRuntimeData):
             "song_length": item.length,
             "queue": True,
         }
-        _notify_queue(runtime)
+        notify_queue(runtime)
 
     return _play
 
 
-def _notify_queue(runtime: UltimateControlRuntimeData) -> None:
+def notify_queue(runtime: UltimateControlRuntimeData) -> None:
     """Tell the dashboard that the queue moved on."""
     for listener in list(getattr(runtime, "queue_listeners", []) or []):
         try:
@@ -703,7 +725,7 @@ def _notify_queue(runtime: UltimateControlRuntimeData) -> None:
             _LOGGER.debug("Queue listener failed", exc_info=True)
 
 
-def _folder_items(
+def folder_queue_items(
     library: SidLibrary, source: str, folder: str, song: int | None
 ) -> list[Any]:
     """Return every SID of a folder (and its sub folders) as queue items."""
@@ -722,13 +744,17 @@ def _folder_items(
             info = library.inspect(file)
         except SidLibraryError:
             continue
+        # Ohne ausdrücklichen Wunsch spielt die Warteschlange den Haupttune,
+        # den das SID selbst angibt (Header, sonst Tune 1).
+        wanted = song or info.start_song
         items.append(
             QueueItem(
                 source=source,
                 path=relative,
                 name=file.name,
-                song=min(song or 1, info.songs),
-                length=info.duration if (song or 1) == 1 else None,
+                song=min(wanted, info.songs),
+                length=info.duration if wanted == 1 else None,
+                start_song=info.start_song,
             )
         )
     return items
@@ -753,7 +779,7 @@ async def ws_queue_play_folder(
     library = _library(runtime)
     try:
         items = await hass.async_add_executor_job(
-            _folder_items,
+            folder_queue_items,
             library,
             msg.get("source", "library"),
             msg.get("path", ""),
@@ -777,7 +803,7 @@ async def ws_queue_play_folder(
     except Exception as err:  # noqa: BLE001 - a device error is the answer
         connection.send_error(msg["id"], "device_error", str(err))
         return
-    _notify_queue(runtime)
+    notify_queue(runtime)
     connection.send_result(msg["id"], state.as_dict())
 
 
@@ -816,7 +842,7 @@ async def ws_queue_action(
     except Exception as err:  # noqa: BLE001
         connection.send_error(msg["id"], "device_error", str(err))
         return
-    _notify_queue(runtime)
+    notify_queue(runtime)
     connection.send_result(msg["id"], state.as_dict())
 
 
@@ -1008,5 +1034,5 @@ async def ws_playlist_play(
     except Exception as err:  # noqa: BLE001
         connection.send_error(msg["id"], "device_error", str(err))
         return
-    _notify_queue(runtime)
+    notify_queue(runtime)
     connection.send_result(msg["id"], state.as_dict())

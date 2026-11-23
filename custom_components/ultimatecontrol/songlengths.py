@@ -60,6 +60,21 @@ def count_subtunes(sid_bytes: bytes) -> int:
     return max(songs, 1)
 
 
+def start_song(sid_bytes: bytes) -> int:
+    """Return the 1-based sub tune the SID asks to be played first.
+
+    The header carries it at offset 16 (big endian, PSID only). ``0`` means the
+    first tune; a value beyond the tune count is clamped, because a damaged
+    header must never send the device a tune number it rejects.
+    """
+    if len(sid_bytes) < 18 or sid_bytes[:4] != b"PSID":
+        return 1
+    start = int.from_bytes(sid_bytes[16:18], "big")
+    if start < 1:
+        return 1
+    return min(start, count_subtunes(sid_bytes))
+
+
 def sid_md5(sid_bytes: bytes) -> str:
     """Return the HVSC song length key (MD5 of the whole file) for SID bytes."""
     return hashlib.md5(sid_bytes).hexdigest()

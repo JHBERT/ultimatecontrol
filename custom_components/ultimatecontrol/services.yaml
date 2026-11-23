@@ -25,3 +25,43 @@ import_folder:
       example: phat
       selector:
         text:
+
+restore_queue:
+  name: Restore the queue
+  description: >-
+    Start the folder queue again after a Home Assistant restart. The timer of a
+    running queue does not survive a restart, so nothing would send the next
+    tune; this rebuilds the queue from the SIDs in a folder. Use it in an
+    automation that runs at Home Assistant start.
+  fields:
+    entry_id:
+      name: Device
+      description: The Ultimate device the queue belongs to.
+      required: true
+      selector:
+        config_entry:
+          integration: ultimatecontrol
+    source:
+      name: Source
+      description: library or favorites.
+      required: false
+      default: library
+      selector:
+        select:
+          options:
+            - library
+            - favorites
+    folder:
+      name: Folder
+      description: Folder inside the library (empty for the whole library).
+      required: false
+      example: MUSICIANS/H/Hubbard_Rob
+      selector:
+        text:
+    shuffle:
+      name: Shuffle
+      description: Play the folder in random order.
+      required: false
+      default: false
+      selector:
+        boolean:

@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.8.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.9.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -154,6 +154,19 @@ class UltimateControlPanel extends HTMLElement {
     this._live = !!(hass && hass.states && hass.connection);
     if (first) {
       this._firstLoad();
+      // Die Integration meldet jeden Wechsel der Warteschlange; damit zieht
+      // die Karte auch nach, wenn sie zwischenzeitlich geschlossen war.
+      if (this._live && hass.connection && hass.connection.subscribeEvents) {
+        hass.connection
+          .subscribeEvents((event) => {
+            const state = event && event.data ? event.data : null;
+            if (!state) return;
+            this._queue = state;
+            this._queueTick();
+            this._render();
+          }, `${DOMAIN}_queue_changed`)
+          .catch(() => {});
+      }
     }
   }
 
@@ -183,11 +196,45 @@ class UltimateControlPanel extends HTMLElement {
     await this._load();
     await this._refreshCurrent();
     await this._queueStatus();
+    // Läuft noch eine Warteschlange (Seite war zu), gleich den Tune setzen.
+    this._queueTick();
     await this._playlistsLoad();
     await this._hvscStatus(false);
   }
 
   /* -------------------------------------------------- Warteschlange */
+  /* Restzeit aus der Endzeit rechnen (die Seite kann zwischenzeitlich zu sein). */
+  _queueRemaining() {
+    const q = this._queue || {};
+    if (!q.playing || !q.ends_at) return null;
+    return Math.max(0, q.ends_at - Date.now() / 1000);
+  }
+
+  _queueTick() {
+    const left = this._queueRemaining();
+    if (left === null) {
+      if (this._queueTimer) {
+        clearInterval(this._queueTimer);
+        this._queueTimer = null;
+      }
+      return;
+    }
+    // Einmal pro Sekunde die Leiste nachziehen, ohne die ganze Karte neu zu bauen.
+    if (!this._queueTimer) {
+      this._queueTimer = setInterval(() => {
+        const rest = this._queueRemaining();
+        const el = this.shadowRoot && this.shadowRoot.querySelector("#qLeft");
+        if (el && rest !== null) el.textContent = `noch ${this._fmtLength(rest)}`;
+        if (rest === null || rest <= 0) {
+          clearInterval(this._queueTimer);
+          this._queueTimer = null;
+          // Tune ist zu Ende: Zustand neu holen (die Integration schaltet weiter).
+          this._queueStatus();
+        }
+      }, 1000);
+    }
+  }
+
   async _queueStatus() {
     if (!this._live) return;
     try {
@@ -391,6 +438,18 @@ class UltimateControlPanel extends HTMLElement {
       this._error = err.message || String(err);
     }
     this._playing = null;
+    // Läuft ein Tune, die aufgeklappte Tune-Liste neu holen, damit der
+    // laufende Tune grün markiert ist.
+    if (this._openTunes) {
+      try {
+        this._detail = await this._ws("inspect", {
+          source: this._view.source,
+          path: this._openTunes,
+        });
+      } catch (err) {
+        /* Die Liste bleibt dann eben ohne Markierung. */
+      }
+    }
     this._render();
   }
 
@@ -650,10 +709,13 @@ class UltimateControlPanel extends HTMLElement {
     const items = q.items || [];
     const cur = items[q.index] || null;
     const next = items[q.index + 1] || null;
-    const left = q.playing && q.remaining ? this._fmtLength(q.remaining) : null;
+    const rest = this._queueRemaining();
+    const left = rest !== null ? this._fmtLength(rest) : null;
     const info = cur
-      ? `<b>${this._esc(cur.name)}</b> · ${q.index + 1}/${q.count}` +
-        (left ? ` · noch ${left}` : "") +
+      ? `<b>${this._esc(cur.name)}</b>${
+          cur.song > 1 ? ` · Tune ${cur.song}` : ""
+        } · ${q.index + 1}/${q.count}` +
+        (left ? ` · <span id="qLeft">noch ${left}</span>` : "") +
         (next ? ` · dann ${this._esc(next.name)}` : " · letzter Tune")
       : `${q.count} Tune(s) bereit`;
     return `<div class="queue">
@@ -697,10 +759,17 @@ class UltimateControlPanel extends HTMLElement {
         let tuneRows = "";
         if (open && this._detail && this._detail.path === key) {
           const lengths = this._detail.lengths || [];
+          const main = this._detail.start_song || 1;
+          const cur = this._current || {};
+          const playing =
+            cur.source === view.source && cur.path === key ? cur.song || 0 : 0;
           let html = "";
           for (let i = 1; i <= Math.min(this._detail.songs, 64); i += 1) {
-            html += `<button class="tune" data-song="${i}" data-name="${this._esc(entry.name)}">
-              <b>${i}</b>${lengths[i - 1] ? `<span>${this._fmtLength(lengths[i - 1])}</span>` : ""}
+            const cls = i === playing ? "tune playing" : i === main ? "tune main" : "tune";
+            const mark = i === playing ? "▶ " : i === main ? "★ " : "";
+            html += `<button class="${cls}" data-song="${i}" data-name="${this._esc(entry.name)}"
+              title="${i === playing ? "läuft gerade" : i === main ? "Haupttune des SID" : ""}">
+              ${mark}<b>${i}</b>${lengths[i - 1] ? `<span>${this._fmtLength(lengths[i - 1])}</span>` : ""}
             </button>`;
           }
           tuneRows = `<div class="tunes">${html}</div>`;
@@ -950,6 +1019,12 @@ class UltimateControlPanel extends HTMLElement {
                        border:1px solid var(--divider-color,#444); background:transparent;
                        color:var(--primary-text-color,#eee); cursor:pointer; }
         .tunes .tune span { opacity:.6; margin-left:4px; }
+        /* Haupttune des SID: blau vorbelegt. */
+        .tunes .tune.main { border-color: var(--primary-color,#03a9f4); color:#fff;
+                            background: color-mix(in srgb, var(--primary-color,#03a9f4) 45%, transparent); }
+        /* Was gerade läuft: grün. */
+        .tunes .tune.playing { border-color: var(--success-color,#4caf50); color:#fff;
+                               background: color-mix(in srgb, var(--success-color,#4caf50) 60%, transparent); }
         .now { display:flex; align-items:center; gap:10px; margin-top:10px;
                padding-top:8px; border-top:1px solid var(--divider-color,#333);
                font-size:.82rem; color: var(--secondary-text-color,#bbb); }

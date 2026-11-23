@@ -214,3 +214,83 @@ async def test_the_timer_really_advances_after_the_length(monkeypatch):
     assert rec.played == [("a.sid", 1), ("b.sid", 1)]
     assert player.state.index == 1
     player.cancel()
+
+
+# ----------------------------------------------------------------------
+# main tune
+# ----------------------------------------------------------------------
+async def test_the_queue_plays_the_tunes_own_main_tune():
+    rec = Recorder()
+
+    async def start_song_of(item):
+        return 3
+
+    player = QueuePlayer(rec.play, start_song_of=start_song_of)
+    await player.start(_items(("a.sid", 1, 90)))
+    assert rec.played == [("a.sid", 3)]
+    player.cancel()
+
+
+async def test_an_explicit_tune_wins_over_the_main_tune():
+    rec = Recorder()
+
+    async def start_song_of(item):
+        return 3
+
+    player = QueuePlayer(rec.play, start_song_of=start_song_of)
+    await player.start(_items(("a.sid", 2, 90)))
+    assert rec.played == [("a.sid", 2)]
+    player.cancel()
+
+
+async def test_a_failing_lookup_still_plays_tune_one():
+    rec = Recorder()
+
+    async def broken(item):
+        raise OSError("gone")
+
+    player = QueuePlayer(rec.play, start_song_of=broken)
+    await player.start(_items(("a.sid", 1, 90)))
+    assert rec.played == [("a.sid", 1)]
+    player.cancel()
+
+
+# ----------------------------------------------------------------------
+# state for a freshly opened dashboard
+# ----------------------------------------------------------------------
+async def test_the_queue_reports_when_the_timer_ends():
+    import time
+
+    rec = Recorder()
+    player = QueuePlayer(rec.play)
+    before = time.time()
+    await player.start(_items(("a.sid", 1, 90)))
+    ends_at = player.state.as_dict()["ends_at"]
+    assert ends_at is not None
+    assert before + 90 <= ends_at <= time.time() + 91
+    player.cancel()
+    assert player.state.as_dict()["ends_at"] is None
+
+
+async def test_a_paused_queue_has_no_end_time():
+    rec = Recorder()
+    player = QueuePlayer(rec.play)
+    await player.start(_items(("a.sid", 1, 90)))
+    player.cancel()
+    player.state.playing = False
+    assert player.state.as_dict()["ends_at"] is None
+
+
+async def test_a_queue_can_be_started_again_after_a_restart():
+    """After a restart the state is rebuilt: same tunes, same timer."""
+    rec = Recorder()
+    player = QueuePlayer(rec.play)
+    items = _items(("a.sid", 1, 90), ("b.sid", 1, 30))
+    # Was a running queue before the restart, now an empty state.
+    player.replace(items, title="MUSICIANS/H")
+    await player.start()
+    assert rec.played == [("a.sid", 1)]
+    assert player.state.title == "MUSICIANS/H"
+    assert player.state.remaining == 90 + queue_player.END_GRACE
+    assert player.state.as_dict()["ends_at"] is not None
+    player.cancel()

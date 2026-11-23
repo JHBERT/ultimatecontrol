@@ -22,7 +22,12 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from .songlengths import SongLengthsDatabase, count_subtunes, sid_md5
+from .songlengths import (
+    SongLengthsDatabase,
+    count_subtunes,
+    sid_md5,
+    start_song,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +51,8 @@ class SidFile:
     relative_path: str
     size: int
     songs: int = 1
+    # The sub tune the SID itself wants played first (1-based).
+    start_song: int = 1
     md5: str = ""
     lengths: list[float] = field(default_factory=list)
 
@@ -123,6 +130,7 @@ class SidLibrary:
                     "name": child.name,
                     "is_dir": False,
                     "songs": info.songs,
+                    "start_song": info.start_song,
                     "duration": info.duration,
                 }
             )
@@ -149,6 +157,7 @@ class SidLibrary:
             relative_path=str(path),
             size=stat.st_size,
             songs=count_subtunes(data),
+            start_song=start_song(data),
             md5=md5,
             lengths=lengths,
         )

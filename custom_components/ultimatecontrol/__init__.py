@@ -51,7 +51,7 @@ CONF_FOLDER = "folder"
 CONF_SUBFOLDER = "subfolder"
 
 # The dashboard card; served as a module so a dashboard needs no file copy.
-PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.8.0"
+PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.9.0"
 
 # Optional file name of the HVSC song length database inside the cache folder.
 # The raw ``Songlengths.md5`` is parsed, the JSON file (built with
@@ -211,6 +211,42 @@ async def _async_handle_import(hass: HomeAssistant, call: ServiceCall) -> None:
     )
 
 
+SERVICE_RESTORE_QUEUE = "restore_queue"
+
+
+async def _async_restore_queue(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Start the queue again after a Home Assistant restart.
+
+    The timer of a running queue does not survive a restart: the C64 keeps
+    playing, but nothing would send the next tune. This service puts the queue
+    back together from the SIDs in a folder, so a restart in the middle of a
+    folder does not end the evening. It is meant for an automation that runs
+    ``ultimatecontrol.restore_queue`` at Home Assistant start.
+    """
+    runtime = websocket_api.runtime_for(hass, call.data[ATTR_ENTRY_ID])
+    source = call.data.get("source", "library")
+    folder = (call.data.get(CONF_FOLDER) or "").strip("/")
+    shuffle = bool(call.data.get("shuffle", False))
+    library = websocket_api.library_for(runtime)
+    try:
+        items = await hass.async_add_executor_job(
+            websocket_api.folder_queue_items, library, source, folder, None
+        )
+    except SidLibraryError as err:
+        raise HomeAssistantError(str(err)) from err
+    if not items:
+        raise HomeAssistantError(f"No SID files in {folder or 'the library'}")
+    if shuffle:
+        import random
+
+        random.shuffle(items)
+    player = websocket_api.queue_for(runtime)
+    player.replace(items, title=folder)
+    await player.start()
+    websocket_api.notify_queue(runtime)
+    _LOGGER.info("Queue restored: %s tune(s) from %s", len(items), folder or source)
+
+
 IMPORT_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTRY_ID): cv.string,
@@ -232,6 +268,25 @@ def _async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_IMPORT, _import, schema=IMPORT_SCHEMA
     )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_RESTORE_QUEUE):
+
+        async def _restore(call: ServiceCall) -> None:
+            await _async_restore_queue(hass, call)
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RESTORE_QUEUE,
+            _restore,
+            schema=vol.Schema(
+                {
+                    vol.Required(ATTR_ENTRY_ID): cv.string,
+                    vol.Optional("source", default="library"): cv.string,
+                    vol.Optional(CONF_FOLDER, default=""): cv.string,
+                    vol.Optional("shuffle", default=False): cv.boolean,
+                }
+            ),
+        )
 
 
 @callback

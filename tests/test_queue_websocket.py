@@ -363,3 +363,47 @@ def test_status_reports_an_empty_queue(tmp_path):
     asyncio.run(module.ws_queue_status(hass, connection, {"id": 1, "entry_id": "e"}))
     assert connection.result["count"] == 0
     assert connection.result["playing"] is False
+
+
+def _sid_with_main(songs: int, start: int) -> bytes:
+    header = bytearray(124)
+    header[0:4] = b"PSID"
+    header[4:6] = (2).to_bytes(2, "big")
+    header[14:16] = songs.to_bytes(2, "big")
+    header[16:18] = start.to_bytes(2, "big")
+    return bytes(header) + b"\x00" * 32
+
+
+def test_a_folder_plays_each_tunes_main_tune(tmp_path):
+    module, runtime, api, hass = _setup(tmp_path)
+    folder = runtime.library.library_dir / "MUSICIANS" / "H" / "Hubbard"
+    (folder / "Commando.sid").write_bytes(_sid_with_main(3, 2))
+    (folder / "Monty.sid").write_bytes(_sid_with_main(4, 0))
+    connection = FakeConnection()
+    asyncio.run(
+        module.ws_queue_play_folder(
+            hass, connection, {"id": 1, "entry_id": "e", "path": "MUSICIANS"}
+        )
+    )
+    songs = [item["song"] for item in connection.result["items"]]
+    # Commando asks for tune 2, Monty for its first.
+    assert songs == [2, 1]
+    # And the first tune the device got is that main tune.
+    assert api.uploads[0][1] == 2
+    runtime.queue.cancel()
+
+
+def test_the_queue_status_carries_the_end_time(tmp_path):
+    module, runtime, api, hass = _setup(tmp_path)
+    connection = FakeConnection()
+    asyncio.run(
+        module.ws_queue_play_folder(
+            hass, connection, {"id": 1, "entry_id": "e", "path": "MUSICIANS"}
+        )
+    )
+    asyncio.run(module.ws_queue_status(hass, connection, {"id": 2, "entry_id": "e"}))
+    # A dashboard that is opened later knows what runs and how long it runs.
+    assert connection.result["playing"] is True
+    assert connection.result["ends_at"] is not None
+    assert connection.result["items"][connection.result["index"]]["name"] == "Commando.sid"
+    runtime.queue.cancel()
