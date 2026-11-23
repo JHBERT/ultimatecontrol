@@ -24,6 +24,10 @@ class FakeResources:
         self._items = list(items or [])
         self.created = []
         self.updated = []
+        self.reloads = 0
+
+    async def async_reload(self):
+        self.reloads += 1
 
     async def async_get_info(self):
         return {"resources": len(self._items)}
@@ -144,6 +148,29 @@ def test_yaml_mode_is_left_alone(caplog):
 
     assert not hass.tasks
     assert "YAML" in caplog.text or True  # the message itself is informational
+
+
+def test_reloads_the_dashboards_after_adding():
+    module = _load_lovelace()
+    resources = FakeResources()
+    hass = FakeHass(FakeLovelace(resources))
+
+    _run(module, hass)
+
+    assert resources.created
+    assert resources.reloads == 1
+
+
+def test_reloads_the_dashboards_after_updating_the_marker():
+    module = _load_lovelace()
+    old = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.4.1"
+    resources = FakeResources([{"id": "abc", "url": old}])
+    hass = FakeHass(FakeLovelace(resources))
+
+    _run(module, hass)
+
+    assert resources.updated == [("abc", {"url": URL})]
+    assert resources.reloads == 1
 
 
 def test_no_lovelace_does_not_raise():

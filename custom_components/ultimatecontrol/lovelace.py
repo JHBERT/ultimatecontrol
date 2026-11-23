@@ -51,6 +51,7 @@ def async_ensure_resource(hass: HomeAssistant, url: str) -> None:
         _async_ensure_resource(hass, resources, url),
         name=f"{DOMAIN} lovelace resource",
     )
+    _async_reload_resources(hass, resources)
 
 
 async def _async_ensure_resource(
@@ -76,3 +77,24 @@ async def _async_ensure_resource(
 
     await resources.async_create_item({"res_type": "module", "url": url})
     _LOGGER.info("Added the dashboard card as a Lovelace resource: %s", url)
+    # The dashboards hold their own copy of the resource list; without this the
+    # browser is never told about the new URL and the card stays undefined
+    # until Home Assistant is restarted.
+    _async_reload_resources(hass, resources)
+
+
+@callback
+def _async_reload_resources(hass: HomeAssistant, resources) -> None:
+    """Tell the running dashboards to load the resource list again."""
+    async_reload = getattr(resources, "async_reload", None)
+    if async_reload is None:
+        _LOGGER.debug("This Lovelace version has no async_reload; a restart is needed")
+        return
+
+    async def _reload() -> None:
+        try:
+            await async_reload()
+        except Exception:  # noqa: BLE001 - a dashboard must never break setup
+            _LOGGER.debug("Reloading the Lovelace resources failed", exc_info=True)
+
+    hass.async_create_task(_reload(), name=f"{DOMAIN} lovelace reload")
