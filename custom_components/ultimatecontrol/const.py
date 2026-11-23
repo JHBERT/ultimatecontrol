@@ -33,6 +33,12 @@ PROGRAM_EXTENSIONS = {".prg", ".crt"}
 
 SID_MIME_TYPE = "audio/x-sid"
 
+# Extensions the device can start on its own (SID player, program runner, disk
+# drive). Everything else is hidden in the media browser.
+RUNNABLE_EXTENSIONS = (
+    SID_EXTENSIONS | DISK_EXTENSIONS | PROGRAM_EXTENSIONS | {".d64", ".d71", ".d81"}
+)
+
 # Separator between a device path and the sub tune number in a media id.
 SONG_SEPARATOR = "#"
 

@@ -49,6 +49,21 @@ _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
 
+def _strip_device_prefix(hass: HomeAssistant, identifier: str) -> str:
+    """Remove the "<entry_id>/" prefix the media source adds for several devices.
+
+    With more than one Ultimate configured, the media browser prefixes every
+    identifier with the config entry it belongs to. The player only needs the
+    device path.
+    """
+    prefix, separator, rest = identifier.lstrip("/").partition("/")
+    if separator and prefix in {
+        entry.entry_id for entry in hass.config_entries.async_loaded_entries(DOMAIN)
+    }:
+        return rest
+    return identifier
+
+
 def _split_media_id(media_id: str) -> tuple[str, int | None]:
     """Split "path#2" into ("path", 2). Song numbers are 1-based."""
     if SONG_SEPARATOR not in media_id:
@@ -189,7 +204,7 @@ class UltimateMediaPlayer(MediaPlayerEntity):
                 item = MediaSourceItem.from_uri(self.hass, media_id, self.entity_id)
             except ValueError as err:
                 raise HomeAssistantError(f"Invalid media id {media_id}") from err
-            media_id = unquote(item.identifier or "")
+            media_id = _strip_device_prefix(self.hass, unquote(item.identifier or ""))
             if not media_id:
                 raise HomeAssistantError("No file selected in the media browser")
 
