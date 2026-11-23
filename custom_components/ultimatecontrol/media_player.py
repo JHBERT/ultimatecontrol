@@ -41,13 +41,13 @@ from .const import (
     MANUFACTURER,
     SID_EXTENSIONS,
     SONG_SEPARATOR,
-    UPLOAD_DIR,
 )
 from .runtime_data import UltimateControlConfigEntry, UltimateControlRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
+
 
 def _strip_device_prefix(hass: HomeAssistant, identifier: str) -> str:
     """Remove the "<entry_id>/" prefix the media source adds for several devices.
@@ -264,18 +264,21 @@ class UltimateMediaPlayer(MediaPlayerEntity):
     # internals
     # ------------------------------------------------------------------
     async def _async_play_sid(self, path: str, song: int | None) -> None:
-        """Play a SID, either from the device or by uploading it first."""
+        """Play a SID from the device, or from disk when given a local file.
+
+        The Ultimate II+ cannot download files over REST and has no writable
+        RAM disk for a SID, so a file that is not on the device is streamed to
+        the ``sidplay`` runner in one POST instead of being uploaded first.
+        """
         async with self._lock:
-            local_file = Path(path)
-            if local_file.is_file():
-                # A file on the Home Assistant host (HVSC on the HA server):
-                # upload it to the device, then play it from there.
+            # Only a plain path is looked at locally: a device path such as
+            # /Usb0/song.sid must never be read from (or found on) this host.
+            local_file = Path(path) if not path.startswith("/") else None
+            if local_file is not None and local_file.is_file():
                 data = await self.hass.async_add_executor_job(local_file.read_bytes)
-                remote = f"{UPLOAD_DIR}/{local_file.name}"
                 await self._async_call(
                     self._runtime.api.async_upload_and_play_sid(data, song)
                 )
-                path = remote
             else:
                 await self._async_call(
                     self._runtime.api.async_play_sid(path, song)

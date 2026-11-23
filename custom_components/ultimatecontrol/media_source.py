@@ -158,7 +158,10 @@ async def _async_list_folder_via_api(api: UltimateApi, path: str) -> list[dict[s
 
 
 def _entry_to_browse_media(
-    domain: str, parent_path: str, entry: dict[str, Any], hide_other: bool = True
+    domain: str,
+    parent_path: str,
+    entry: dict[str, Any],
+    hide_other: bool = True,
 ) -> BrowseMediaSource | None:
     """Convert one directory entry into a browse media item.
 
@@ -318,19 +321,17 @@ class UltimateMediaSource(MediaSource):
         # is shown, so a folder is never a dead end.
         children: list[BrowseMediaSource] = []
         for hide_other in (True, False):
-            children = [
-                child
-                for child in (
-                    _entry_to_browse_media(
-                        DOMAIN,
-                        prefix + parent.rstrip("/"),
-                        entry,
-                        hide_other=hide_other,
-                    )
-                    for entry in entries
+            built: list[BrowseMediaSource] = []
+            for entry in entries:
+                child = _entry_to_browse_media(
+                    DOMAIN,
+                    prefix + parent.rstrip("/"),
+                    entry,
+                    hide_other=hide_other,
                 )
-                if child is not None
-            ]
+                if child is not None:
+                    built.append(child)
+            children = built
             if children or hide_other is False:
                 break
         children.sort(key=_sort_key)

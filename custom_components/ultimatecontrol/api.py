@@ -176,6 +176,35 @@ class UltimateApi:
         info = payload.get("files") if isinstance(payload, dict) else None
         return info if isinstance(info, dict) else {}
 
+    async def async_get_file(self, path: str, max_bytes: int = 262144) -> bytes:
+        """Download one file from the device (capped, for header checks)."""
+        clean = "/" + path.strip("/")
+        url = f"{self._base}/v1/files{_quote_path(clean)}"
+        try:
+            async with asyncio.timeout(DEFAULT_TIMEOUT):
+                async with self._session.get(
+                    url, headers=self._headers(), timeout=ClientTimeout(total=DEFAULT_TIMEOUT)
+                ) as resp:
+                    if resp.status == 403:
+                        raise UltimateAuthError(
+                            "The Ultimate refused the request (HTTP 403). "
+                            "Check the network password."
+                        )
+                    if resp.status >= 400:
+                        text = await resp.text()
+                        raise UltimateApiError(
+                            f"{url} returned HTTP {resp.status}: {text.strip()[:200]}"
+                        )
+                    return await resp.content.read(max_bytes)
+        except TimeoutError as err:
+            raise UltimateConnectionError(
+                f"Timeout downloading {path} from the Ultimate at {self.host}"
+            ) from err
+        except ClientError as err:
+            raise UltimateConnectionError(
+                f"Cannot download {path} from the Ultimate at {self.host}: {err}"
+            ) from err
+
     async def async_list_directory(self, path: str) -> list[dict[str, Any]]:
         """Return the entries of one folder on the device.
 

@@ -46,6 +46,20 @@ def parse_song_lengths_line(value: str) -> list[float]:
     return lengths
 
 
+def count_subtunes(sid_bytes: bytes) -> int:
+    """Return the number of sub tunes in SID bytes (1 for anything unreadable).
+
+    The header of a PSID/RSID file carries the count at offset 14 (big endian);
+    ``0`` means "one tune" and RSID files always have a single one.
+    """
+    if len(sid_bytes) < 16 or sid_bytes[:4] not in (b"PSID", b"RSID"):
+        return 1
+    if sid_bytes[:4] == b"RSID":
+        return 1
+    songs = int.from_bytes(sid_bytes[14:16], "big")
+    return max(songs, 1)
+
+
 def sid_md5(sid_bytes: bytes) -> str:
     """Return the HVSC song length key (MD5 of the whole file) for SID bytes."""
     return hashlib.md5(sid_bytes).hexdigest()

@@ -77,3 +77,19 @@ def test_from_file(tmp_path: Path):
     path.write_text(SAMPLE, encoding="utf-8")
     db = SongLengthsDatabase.from_file(path)
     assert len(db) == 3
+
+
+def test_count_subtunes_reads_psid_header():
+    """The header count is read; 0 means one tune and RSID is always one."""
+    import struct
+
+    def sid(magic: bytes, songs: int) -> bytes:
+        header = magic + struct.pack(">HHHHHHH", 2, 0x7C, 0, 0x1000, 0x1003, songs, 1)
+        return header + b"\x00" * 8
+
+    count_subtunes = songlengths.count_subtunes
+    assert count_subtunes(sid(b"PSID", 1)) == 1
+    assert count_subtunes(sid(b"PSID", 0)) == 1  # 0 means "one tune"
+    assert count_subtunes(sid(b"PSID", 19)) == 19
+    assert count_subtunes(sid(b"RSID", 9)) == 1
+    assert count_subtunes(b"not a sid") == 1
