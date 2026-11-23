@@ -33,6 +33,8 @@ class UltimateControlRuntimeData:
     queue: Any = None
     # Callbacks that fire when the queue moves on, so the dashboard follows.
     queue_listeners: list[Any] = field(default_factory=list)
+    # Saved playlists (playlist.py); created on first use.
+    playlists: Any = None
 
     @property
     def info(self) -> dict:

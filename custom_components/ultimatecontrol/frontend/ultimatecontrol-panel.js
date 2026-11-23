@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.7.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.8.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -137,6 +137,10 @@ class UltimateControlPanel extends HTMLElement {
     this._lastDir = {};
     // Ordner-Warteschlange: was läuft, was kommt als Nächstes.
     this._queue = { count: 0, index: -1, playing: false, items: [] };
+    // Gespeicherte Playlists und die gerade geöffnete.
+    this._playlists = [];
+    this._playlist = null;
+    this._playlistView = false;
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
@@ -179,6 +183,7 @@ class UltimateControlPanel extends HTMLElement {
     await this._load();
     await this._refreshCurrent();
     await this._queueStatus();
+    await this._playlistsLoad();
     await this._hvscStatus(false);
   }
 
@@ -189,6 +194,10 @@ class UltimateControlPanel extends HTMLElement {
       this._queue = await this._ws("queue_status");
     } catch (err) {
       this._queue = { count: 0, index: -1, playing: false, items: [] };
+    // Gespeicherte Playlists und die gerade geöffnete.
+    this._playlists = [];
+    this._playlist = null;
+    this._playlistView = false;
     }
     this._render();
   }
@@ -367,13 +376,13 @@ class UltimateControlPanel extends HTMLElement {
     this._play(entry.name, 1);
   }
 
-  async _play(name, song) {
-    const path = this._view.path ? `${this._view.path}/${name}` : name;
+  async _play(name, song, source, fullPath) {
+    const path = fullPath || (this._view.path ? `${this._view.path}/${name}` : name);
     this._playing = path;
     this._render();
     try {
       this._current = await this._ws("play", {
-        source: this._view.source,
+        source: source || this._view.source,
         path,
         song,
       });
@@ -511,6 +520,128 @@ class UltimateControlPanel extends HTMLElement {
     this._render();
   }
 
+  /* -------------------------------------------------- Playlists */
+  async _playlistsLoad() {
+    if (!this._live) return;
+    try {
+      const result = await this._ws("playlists");
+      this._playlists = result.playlists || [];
+    } catch (err) {
+      this._playlists = [];
+    }
+    this._render();
+  }
+
+  /* Den laufenden Tune in eine Playlist legen (Name wird abgefragt). */
+  async _addToPlaylist() {
+    const cur = this._current || {};
+    if (!cur.path) {
+      this._error = "Es läuft gerade kein Tune aus der Bibliothek.";
+      this._render();
+      return;
+    }
+    let name = "";
+    try {
+      name = window.prompt(
+        "In welche Playlist? (neuer Name legt sie an)",
+        (this._playlists[0] && this._playlists[0].name) || "Meine Playlist"
+      ) || "";
+    } catch (err) {
+      name = "";
+    }
+    if (!name.trim()) return;
+    try {
+      // Der laufende Tune kann tiefer liegen als der offene Ordner, deshalb
+      // über die Bibliothek suchen lassen.
+      const found = await this._ws("browse", {
+        source: cur.source || "library",
+        path: cur.path,
+        file: true,
+      });
+      const file = found.file || {};
+      const result = await this._ws("playlist_add", {
+        name: name.trim(),
+        source: cur.source || "library",
+        path: cur.path,
+        song: cur.song || 1,
+        // Für den Fall, dass die Datei in einem Unterordner liegt:
+        items: [
+          {
+            source: cur.source || "library",
+            path: cur.path,
+            name: file.name || cur.name,
+            song: cur.song || 1,
+          },
+        ],
+      });
+      this._flash = `„${cur.name}“ → Playlist „${result.name}“ (${result.count})`;
+      this._error = null;
+      await this._playlistsLoad();
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._render();
+    }
+  }
+
+  async _openPlaylist(name) {
+    try {
+      this._playlist = await this._ws("playlist_get", { name });
+      this._error = null;
+    } catch (err) {
+      this._playlist = null;
+      this._error = err.message || String(err);
+    }
+    this._render();
+  }
+
+  async _playPlaylist(shuffle) {
+    if (!this._playlist) return;
+    this._playlistBusy = true;
+    this._render();
+    try {
+      this._queue = await this._ws("playlist_play", {
+        name: this._playlist.name,
+        shuffle: !!shuffle,
+      });
+      this._flash = `Playlist „${this._playlist.name}“ läuft (${this._queue.count} Tune(s))`;
+      await this._refreshCurrent();
+    } catch (err) {
+      this._error = err.message || String(err);
+    } finally {
+      this._playlistBusy = false;
+      this._render();
+    }
+  }
+
+  async _playlistRemove(index) {
+    if (!this._playlist) return;
+    try {
+      this._playlist = await this._ws("playlist_edit", {
+        name: this._playlist.name,
+        action: "remove",
+        index,
+      });
+      await this._playlistsLoad();
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._render();
+    }
+  }
+
+  async _playlistDelete() {
+    if (!this._playlist) return;
+    const name = this._playlist.name;
+    try {
+      await this._ws("playlist_edit", { name, action: "delete" });
+      this._playlist = null;
+      this._flash = `Playlist „${name}“ gelöscht`;
+      await this._playlistsLoad();
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._render();
+    }
+  }
+
   /* -------------------------------------------------- Darstellung */
   /* Die Leiste unter der Liste: was läuft, wie lange noch, nächster Tune. */
   _queueBar() {
@@ -596,6 +727,107 @@ class UltimateControlPanel extends HTMLElement {
       return;
     }
 
+    if (this._playlistView) {
+      const list = this._playlist;
+      const items = list ? list.items || [] : [];
+      const rows = items
+        .map(
+          (item, index) => `<div class="row file">
+            <span class="icon">♪</span>
+            <span class="name" data-plplay="${index}" title="Diesen Tune jetzt spielen"
+                  style="cursor:pointer">${this._esc(item.name)}${
+              item.song > 1 ? ` · Tune ${item.song}` : ""
+            }</span>
+            <button class="tune" data-plrm="${index}" title="Aus der Playlist entfernen">✕</button>
+          </div>`
+        )
+        .join("");
+      const names = (this._playlists || [])
+        .map(
+          (item) => `<button class="plname" data-plopen="${this._esc(item.name)}">
+            ${this._esc(item.name)} <span class="badge">${item.count}</span>
+          </button>`
+        )
+        .join("");
+      this.shadowRoot.innerHTML = `
+        <style>
+          :host { display:block; }
+          ha-card { padding: 12px 14px 14px; }
+          .head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+          .title { font-size:1.05rem; font-weight:600; flex:1; }
+          .list { max-height: 300px; overflow-y:auto; }
+          .row { display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:6px;
+                 font-size:.92rem; }
+          .row .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .row .tune { font:inherit; font-size:.78rem; padding:1px 8px; border-radius:10px;
+                       border:1px solid var(--divider-color,#444); background:transparent;
+                       color:var(--primary-text-color,#eee); cursor:pointer; }
+          .badge { font-size:.7rem; padding:1px 6px; border-radius:8px;
+                   background:rgba(127,127,127,.22); }
+          .plname { font:inherit; font-size:.82rem; padding:4px 10px; border-radius:14px;
+                    border:1px solid var(--divider-color,#444); background:transparent;
+                    color: var(--primary-text-color,#eee); cursor:pointer; margin:0 4px 4px 0; }
+          .hint { font-size:.78rem; color: var(--secondary-text-color,#999); margin:8px 0; }
+          .actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+          .actions button { font:inherit; font-size:.85rem; padding:6px 14px; border-radius:16px;
+                            border:1px solid var(--divider-color,#444); background:transparent;
+                            color: var(--primary-text-color,#eee); cursor:pointer; }
+          .actions button.primary { background: var(--primary-color,#03a9f4);
+                                    border-color:transparent; color:#fff; }
+          .actions button:disabled { opacity:.45; cursor:default; }
+          .msg { font-size:.8rem; margin-top:6px; }
+          .msg.err { color: var(--error-color,#f44336); }
+        </style>
+        <ha-card>
+          <div class="head">
+            <div class="title">Playlists</div>
+            <button class="tune" id="plBack">Zurück</button>
+          </div>
+          <div>${names || `<div class="hint">Noch keine Playlist. Tune spielen und „＋ Playlist“ drücken.</div>`}</div>
+          ${
+            list
+              ? `<div class="path"><b>${this._esc(list.name)}</b> · ${items.length} Tune(s)</div>
+                 <div class="list">${rows || `<div class="hint">Diese Playlist ist leer.</div>`}</div>
+                 <div class="actions">
+                   <button class="primary" id="plPlay" ${
+                     items.length && !this._playlistBusy ? "" : "disabled"
+                   }>▶ Playlist abspielen</button>
+                   <button id="plShuffle" ${items.length ? "" : "disabled"}>🔀</button>
+                   <button id="plDelete">Playlist löschen</button>
+                 </div>`
+              : `<div class="hint">Eine Playlist antippen, um sie zu sehen und abzuspielen.</div>`
+          }
+          ${this._error ? `<div class="msg err">${this._esc(this._error)}</div>` : ""}
+        </ha-card>`;
+
+      const root = this.shadowRoot;
+      root.querySelector("#plBack").addEventListener("click", () => {
+        this._playlistView = false;
+        this._render();
+      });
+      root.querySelectorAll("[data-plopen]").forEach((el) =>
+        el.addEventListener("click", () => this._openPlaylist(el.dataset.plopen))
+      );
+      root.querySelectorAll("[data-plrm]").forEach((el) =>
+        el.addEventListener("click", () => this._playlistRemove(Number(el.dataset.plrm)))
+      );
+      root.querySelectorAll("[data-plplay]").forEach((el) =>
+        el.addEventListener("click", () => {
+          const item = items[Number(el.dataset.plplay)];
+          if (item) {
+            this._play(item.name, item.song || 1, item.source || "library", item.path);
+          }
+        })
+      );
+      const play = root.querySelector("#plPlay");
+      if (play) play.addEventListener("click", () => this._playPlaylist(false));
+      const shuffle = root.querySelector("#plShuffle");
+      if (shuffle) shuffle.addEventListener("click", () => this._playPlaylist(true));
+      const del = root.querySelector("#plDelete");
+      if (del) del.addEventListener("click", () => this._playlistDelete());
+      return;
+    }
+
     if (this._import) {
       const imp = this._import;
       const rows = imp.entries
@@ -672,6 +904,11 @@ class UltimateControlPanel extends HTMLElement {
            ${
              view.source === "favorites" && cur.source === "favorites"
                ? `<button id="unfav" title="Aus den Favoriten entfernen">✕ Entfernen</button>`
+               : ""
+           }
+           ${
+             cur.source !== "device"
+               ? `<button id="topl" title="Diesen Tune in eine Playlist legen">＋ Playlist</button>`
                : ""
            }
            <span class="nowText">▶ ${this._esc(cur.name)}${
@@ -756,6 +993,9 @@ class UltimateControlPanel extends HTMLElement {
           <div class="tabs">
             <button data-src="library" class="${view.source !== "favorites" ? "on" : ""}">HVSC</button>
             <button data-src="favorites" class="${view.source === "favorites" ? "on" : ""}">★ Favoriten</button>
+            <button data-playlists="1" title="Playlists ansehen">Playlists${
+              this._playlists && this._playlists.length ? ` (${this._playlists.length})` : ""
+            }</button>
             <button data-import="1" title="SID-Ordner vom Home-Assistant-Rechner importieren">＋</button>
           </div>
         </div>
@@ -812,6 +1052,16 @@ class UltimateControlPanel extends HTMLElement {
     if (unfav) unfav.addEventListener("click", () => this._unfavorite());
     const imp = root.querySelector("[data-import]");
     if (imp) imp.addEventListener("click", () => this._openImport());
+    const topl = root.querySelector("#topl");
+    if (topl) topl.addEventListener("click", () => this._addToPlaylist());
+    const plTab = root.querySelector("[data-playlists]");
+    if (plTab)
+      plTab.addEventListener("click", () => {
+        this._playlistView = true;
+        this._playlist = null;
+        this._playlistsLoad();
+        this._render();
+      });
     const playFolder = root.querySelector("#playFolder");
     if (playFolder) playFolder.addEventListener("click", () => this._playFolder(false));
     const playShuffle = root.querySelector("#playShuffle");

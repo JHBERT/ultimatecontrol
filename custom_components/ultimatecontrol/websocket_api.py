@@ -125,6 +125,11 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_queue_play_folder)
     websocket_api.async_register_command(hass, ws_queue_action)
     websocket_api.async_register_command(hass, ws_queue_status)
+    websocket_api.async_register_command(hass, ws_playlists)
+    websocket_api.async_register_command(hass, ws_playlist_get)
+    websocket_api.async_register_command(hass, ws_playlist_add)
+    websocket_api.async_register_command(hass, ws_playlist_edit)
+    websocket_api.async_register_command(hass, ws_playlist_play)
     hass.http.register_view(UltimateSidView(hass))
 
 
@@ -137,6 +142,9 @@ def async_register(hass: HomeAssistant) -> None:
         vol.Required("entry_id"): str,
         vol.Optional("source", default="library"): vol.In(("library", "favorites")),
         vol.Optional("path", default=""): str,
+        # true: einen einzelnen Tune melden (für „zur Playlist hinzufügen“),
+        # auch wenn er in einem Unterordner liegt.
+        vol.Optional("file", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -146,6 +154,29 @@ async def ws_browse(
     """List one folder of the library or of the favourites."""
     runtime = _runtime(hass, msg["entry_id"])
     library = _library(runtime)
+    if msg.get("file"):
+        try:
+            path = await hass.async_add_executor_job(
+                library.find, msg["source"], msg["path"]
+            )
+            info = await hass.async_add_executor_job(library.inspect, path)
+        except SidLibraryError as err:
+            connection.send_error(msg["id"], "not_found", str(err))
+            return
+        connection.send_result(
+            msg["id"],
+            {
+                "source": msg["source"],
+                "path": msg["path"],
+                "file": {
+                    "name": info.name,
+                    "path": msg["path"],
+                    "songs": info.songs,
+                    "duration": info.duration,
+                },
+            },
+        )
+        return
     try:
         entries = await hass.async_add_executor_job(
             library.list_dir, msg["source"], msg["path"]
@@ -799,3 +830,183 @@ async def ws_queue_status(
     """Report the queue: items, position and the time left on the timer."""
     runtime = _runtime(hass, msg["entry_id"])
     connection.send_result(msg["id"], queue_for(runtime).state.as_dict())
+
+
+# ----------------------------------------------------------------------
+# Playlists
+# ----------------------------------------------------------------------
+def playlist_store(runtime: UltimateControlRuntimeData) -> Any:
+    """Return the playlist store of a device."""
+    from .playlist import PlaylistStore
+
+    store = getattr(runtime, "playlists", None)
+    if store is None:
+        store = PlaylistStore(runtime.media_path)
+        runtime.playlists = store
+    return store
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/playlists", vol.Required("entry_id"): str}
+)
+@websocket_api.async_response
+async def ws_playlists(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List the saved playlists."""
+    runtime = _runtime(hass, msg["entry_id"])
+    store = playlist_store(runtime)
+    connection.send_result(msg["id"], {"playlists": await hass.async_add_executor_job(store.list)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/playlist_get",
+        vol.Required("entry_id"): str,
+        vol.Required("name"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_playlist_get(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return one playlist with all its tunes."""
+    from .playlist import PlaylistError
+
+    runtime = _runtime(hass, msg["entry_id"])
+    store = playlist_store(runtime)
+    try:
+        playlist = await hass.async_add_executor_job(store.load, msg["name"])
+    except PlaylistError as err:
+        connection.send_error(msg["id"], "invalid_name", str(err))
+        return
+    if playlist is None:
+        connection.send_error(msg["id"], "not_found", f"No playlist called {msg['name']}")
+        return
+    connection.send_result(msg["id"], playlist.as_dict())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/playlist_add",
+        vol.Required("entry_id"): str,
+        vol.Required("name"): str,
+        vol.Optional("path"): str,
+        vol.Optional("source", default="library"): str,
+        vol.Optional("song", default=1): vol.All(int, vol.Range(min=1, max=256)),
+        vol.Optional("items"): list,
+    }
+)
+@websocket_api.async_response
+async def ws_playlist_add(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Add one tune (or a list of tunes) to a playlist, creating it if needed."""
+    from .playlist import PlaylistError
+
+    runtime = _runtime(hass, msg["entry_id"])
+    store = playlist_store(runtime)
+    items = msg.get("items")
+    if items is None:
+        if not msg.get("path"):
+            connection.send_error(msg["id"], "invalid", "A tune path is required")
+            return
+        items = [
+            {
+                "source": msg.get("source", "library"),
+                "path": msg["path"],
+                "name": str(msg["path"]).rsplit("/", 1)[-1],
+                "song": msg.get("song", 1),
+            }
+        ]
+    try:
+        playlist = await hass.async_add_executor_job(store.add, msg["name"], items)
+    except PlaylistError as err:
+        connection.send_error(msg["id"], "invalid_name", str(err))
+        return
+    connection.send_result(msg["id"], playlist.as_dict())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/playlist_edit",
+        vol.Required("entry_id"): str,
+        vol.Required("name"): str,
+        vol.Required("action"): vol.In(["remove", "clear", "delete"]),
+        vol.Optional("index"): vol.All(int, vol.Range(min=0)),
+    }
+)
+@websocket_api.async_response
+async def ws_playlist_edit(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Remove one tune, empty a playlist or delete it."""
+    from .playlist import PlaylistError
+
+    runtime = _runtime(hass, msg["entry_id"])
+    store = playlist_store(runtime)
+    action = msg["action"]
+    try:
+        if action == "remove":
+            if msg.get("index") is None:
+                connection.send_error(msg["id"], "invalid", "An index is required")
+                return
+            playlist = await hass.async_add_executor_job(
+                store.remove_entry, msg["name"], msg["index"]
+            )
+            connection.send_result(msg["id"], playlist.as_dict())
+            return
+        if action == "clear":
+            playlist = await hass.async_add_executor_job(store.clear, msg["name"])
+            connection.send_result(msg["id"], playlist.as_dict())
+            return
+        removed = await hass.async_add_executor_job(store.delete, msg["name"])
+    except PlaylistError as err:
+        connection.send_error(msg["id"], "not_found", str(err))
+        return
+    connection.send_result(msg["id"], {"name": msg["name"], "deleted": removed})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/playlist_play",
+        vol.Required("entry_id"): str,
+        vol.Required("name"): str,
+        vol.Optional("shuffle", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_playlist_play(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Play a playlist: it becomes the device queue, timer included."""
+    from .queue_player import QueueItem
+    from .playlist import PlaylistError
+
+    runtime = _runtime(hass, msg["entry_id"])
+    store = playlist_store(runtime)
+    try:
+        playlist = await hass.async_add_executor_job(store.load, msg["name"])
+    except PlaylistError as err:
+        connection.send_error(msg["id"], "invalid_name", str(err))
+        return
+    if playlist is None:
+        connection.send_error(msg["id"], "not_found", f"No playlist called {msg['name']}")
+        return
+    items = [QueueItem.from_dict(item) for item in playlist.items]
+    if not items:
+        connection.send_error(msg["id"], "empty", "This playlist has no tunes")
+        return
+    if msg.get("shuffle"):
+        import random
+
+        random.shuffle(items)
+    player = queue_for(runtime)
+    player.replace(items, title=playlist.name)
+    try:
+        state = await player.start()
+    except Exception as err:  # noqa: BLE001
+        connection.send_error(msg["id"], "device_error", str(err))
+        return
+    _notify_queue(runtime)
+    connection.send_result(msg["id"], state.as_dict())
