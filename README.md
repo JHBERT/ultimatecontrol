@@ -201,6 +201,14 @@ The tests in `tests/` start a small aiohttp server that answers like an
 Ultimate device, so the API client, the request it builds and the song length
 parser are covered without hardware and without Home Assistant.
 
+## Mehrere Geräte in einer Karte (ab 1.2.0)
+
+Sind mehrere Ultimates eingerichtet und die Karte hat **keine** `entry_id`,
+zeigt sie im Kopf ein **Dropdown** zur Wahl des Abspielgeräts. Ordner, Queue,
+Playlists und der laufende Tune gehören jeweils zum gewählten Gerät; die Wahl
+merkt sich der Browser. Mit `entry_id` bleibt die Karte fest an einem Gerät
+(`device_picker: true` zeigt das Dropdown trotzdem, `false` blendet es aus).
+
 ## Lizenz
 
 UltimateControl steht unter der **MIT-Lizenz** – siehe [`LICENSE`](LICENSE).

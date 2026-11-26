@@ -51,7 +51,7 @@ CONF_FOLDER = "folder"
 CONF_SUBFOLDER = "subfolder"
 
 # The dashboard card; served as a module so a dashboard needs no file copy.
-PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.1.0"
+PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.2.0"
 
 # Optional file name of the HVSC song length database inside the cache folder.
 # The raw ``Songlengths.md5`` is parsed, the JSON file (built with
@@ -126,7 +126,10 @@ async def async_setup_entry(
     @callback
     def _queue_moved() -> None:
         """Fire an event so the dashboard can follow the queue."""
-        hass.bus.async_fire(f"{DOMAIN}_queue_changed", entry.runtime_data.queue.state.as_dict())
+        hass.bus.async_fire(
+            f"{DOMAIN}_queue_changed",
+            {**entry.runtime_data.queue.state.as_dict(), "entry_id": entry.entry_id},
+        )
 
     entry.runtime_data.queue_listeners.append(_queue_moved)
 

@@ -4,13 +4,16 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.1.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.2.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
  * title: Ultimate 2 Cartridge        (optional)
+ * device_picker: true|false         (optional; Standard: Dropdown, wenn es mehrere Geräte
+ *                                   gibt und keine entry_id gesetzt ist)
  */
 const DOMAIN = "ultimatecontrol";
+const DEVICE_KEY = "ultimatecontrol_device";
 
 /* ------------------------------------------------------------------
  * Konfigurations-Dialog der Karte
@@ -161,6 +164,8 @@ class UltimateControlPanel extends HTMLElement {
           .subscribeEvents((event) => {
             const state = event && event.data ? event.data : null;
             if (!state) return;
+            // Mit mehreren Geräten kommen die Ereignisse aller Warteschlangen an.
+            if (state.entry_id && this._entryId && state.entry_id !== this._entryId) return;
             this._queue = state;
             this._queueTick();
             this._render();
@@ -335,7 +340,16 @@ class UltimateControlPanel extends HTMLElement {
           "Kein UltimateControl-Gerät eingerichtet (Einstellungen → Geräte & Dienste).";
         return;
       }
-      const wanted = String(this._config.entry_id || "").trim();
+      this._devices = devices;
+      // Ohne feste entry_id gilt die zuletzt im Browser gewählte Quelle.
+      let stored = "";
+      try {
+        stored = window.localStorage.getItem(DEVICE_KEY) || "";
+      } catch (err) {
+        stored = "";
+      }
+      const fixed = String(this._config.entry_id || "").trim();
+      const wanted = this._pickedDevice || fixed || stored;
       const match =
         devices.find((d) => d.entry_id === wanted) ||
         devices.find((d) => String(d.unique_id || "") === wanted) ||
@@ -345,7 +359,8 @@ class UltimateControlPanel extends HTMLElement {
         );
       if (match) {
         this._entryId = match.entry_id;
-      } else if (!wanted) {
+      } else if (!fixed) {
+        // Gemerktes Gerät gibt es nicht mehr: das erste nehmen.
         this._entryId = devices[0].entry_id;
       } else {
         this._resolveError =
@@ -357,6 +372,60 @@ class UltimateControlPanel extends HTMLElement {
     } catch (err) {
       this._resolveError = err.message || String(err);
     }
+  }
+
+  /* Zeigt das Geräte-Dropdown, wenn es mehr als ein Gerät gibt und die Karte
+     nicht fest an eines gebunden ist (entry_id) - außer device_picker: true. */
+  _showPicker() {
+    const devices = this._devices || [];
+    if (devices.length < 2 || this._config.device_picker === false) return false;
+    return !String(this._config.entry_id || "").trim() || this._config.device_picker === true;
+  }
+
+  _devicePicker() {
+    const options = this._devices
+      .map(
+        (d) =>
+          `<option value="${this._esc(d.entry_id)}" ${
+            d.entry_id === this._entryId ? "selected" : ""
+          }>${this._esc(d.title || d.entry_id)}</option>`
+      )
+      .join("");
+    return `<select id="device" title="Abspielgerät wählen">${options}</select>`;
+  }
+
+  /* Anderes Gerät wählen: alles, was zum alten Gerät gehörte, verwerfen. */
+  async _switchDevice(entryId) {
+    if (!entryId || entryId === this._entryId) return;
+    this._pickedDevice = entryId;
+    this._entryId = entryId;
+    try {
+      window.localStorage.setItem(DEVICE_KEY, entryId);
+    } catch (err) {
+      /* Speicher gesperrt: die Wahl gilt dann nur bis zum Neuladen. */
+    }
+    if (this._queueTimer) {
+      clearInterval(this._queueTimer);
+      this._queueTimer = null;
+    }
+    this._queue = { count: 0, index: -1, playing: false, items: [] };
+    this._current = {};
+    this._detail = null;
+    this._openTunes = null;
+    this._playlist = null;
+    this._playlistView = false;
+    this._playlists = [];
+    this._entries = [];
+    this._view = { source: this._view.source, path: "" };
+    this._lastDir = {};
+    this._flash = null;
+    this._render();
+    await this._load();
+    await this._refreshCurrent();
+    await this._queueStatus();
+    this._queueTick();
+    await this._playlistsLoad();
+    await this._hvscStatus(false);
   }
 
   async _ws(type, payload = {}) {
@@ -1003,6 +1072,9 @@ class UltimateControlPanel extends HTMLElement {
         .head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
         .title { font-size:1.05rem; font-weight:600; flex:1; }
         .tabs { display:flex; gap:4px; }
+        #device { flex:1; min-width:0; font:inherit; font-weight:600; padding:5px 8px;
+          color:var(--primary-text-color); background:var(--card-background-color,#222);
+          border:1px solid var(--divider-color,#555); border-radius:8px; }
         .tabs button, #fav, #unfav {
           font:inherit; font-size:.8rem; padding:4px 10px; border-radius:14px;
           border:1px solid var(--divider-color,#444); background:transparent;
@@ -1074,7 +1146,11 @@ class UltimateControlPanel extends HTMLElement {
       </style>
       <ha-card>
         <div class="head">
-          <div class="title">${this._esc(this._config.title)}</div>
+          ${
+            this._showPicker()
+              ? this._devicePicker()
+              : `<div class="title">${this._esc(this._config.title)}</div>`
+          }
           <div class="tabs">
             <button data-src="library" class="${view.source !== "favorites" ? "on" : ""}">HVSC</button>
             <button data-src="favorites" class="${view.source === "favorites" ? "on" : ""}">★ Favoriten</button>
@@ -1104,6 +1180,8 @@ class UltimateControlPanel extends HTMLElement {
       </ha-card>`;
 
     const root = this.shadowRoot;
+    const devSel = root.querySelector("#device");
+    if (devSel) devSel.addEventListener("change", () => this._switchDevice(devSel.value));
     root.querySelectorAll("[data-src]").forEach((el) =>
       el.addEventListener("click", () => this._switch(el.dataset.src))
     );
