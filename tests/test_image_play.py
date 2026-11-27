@@ -150,6 +150,7 @@ def _module():
     const.DISK_EXTENSIONS = {".d64", ".d71", ".d81", ".g64", ".g71"}
     const.SID_EXTENSIONS = {".sid"}
     const.PROGRAM_EXTENSIONS = {".prg", ".crt"}
+    const.KEYBOARD_DELAY = 0
 
     api = types.ModuleType("ultimatecontrol.api")
 
@@ -343,3 +344,54 @@ def _temp_d64() -> Path:
 
 async def _executor(func, *args):
     return func(*args)
+
+
+def test_keyboard_autostart_types_the_load_command():
+    module, _ = _module()
+    api = _Api()
+    api.calls = []
+    typed = []
+
+    async def async_reset():
+        typed.append("reset")
+
+    async def async_type_text(text, enter=True):
+        typed.append(text)
+
+    api.async_reset = async_reset
+    api.async_type_text = async_type_text
+    runtime = types.SimpleNamespace(api=api, last_played=None)
+    hass = types.SimpleNamespace(
+        data={"ultimatecontrol": {"entry": runtime}},
+        async_add_executor_job=_executor,
+    )
+    connection = FakeConnection()
+    library = types.SimpleNamespace(
+        find=lambda source, path: _temp_d64(),
+        library_dir=Path("/tmp"),
+        favorites_dir=Path("/tmp"),
+    )
+    module._runtime = lambda hass, entry_id: runtime
+    module._library = lambda runtime: library
+
+    asyncio.run(
+        module.ws_image_play(
+            hass,
+            connection,
+            {
+                "id": 3,
+                "entry_id": "e",
+                "path": "DEMOS/DEMO.D64",
+                "source": "library",
+                "drive": "a",
+                "mode": "readonly",
+                "autostart": True,
+                "autostart_method": "keyboard",
+            },
+        )
+    )
+
+    assert connection.error is None
+    assert connection.result["action"] == "mount+type"
+    assert typed == ["reset", 'LOAD"*",8,1']
+    assert [c["path"] for c in api.calls] == ["/v1/drives/a:mount"]

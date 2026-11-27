@@ -224,6 +224,16 @@ gestartet – das ist der Autostart, den die API für Disketten selbst nicht hat
 Die Diskette bleibt dabei in Laufwerk A eingelegt, Nachladen funktioniert also.
 Mit `autostart: false` wird nur eingelegt.
 
+### Autostart per Tastatur (ab 1.5.0)
+
+`autostart_method: keyboard` startet eine Diskette wie von Hand: die Maschine
+wird zurückgesetzt, dann tippt die Integration `LOAD"*",8,1` und RETURN in den
+Tastaturpuffer des KERNAL (`PUT /v1/machine:writemem` auf `$0277`, Länge nach
+`$00C6`). Das ist der klassische Weg und funktioniert auch bei Images, deren
+Verzeichnis hier nicht lesbar ist. Der Befehl lässt sich mit `load_command`
+überschreiben (z. B. `LOAD"DEMO",8,1`). In der Karte schaltet
+`autostart_method: keyboard|prg` um; Standard ist `prg`.
+
 ## Mehrere Geräte in einer Karte (ab 1.2.0)
 
 Sind mehrere Ultimates eingerichtet und die Karte hat **keine** `entry_id`,

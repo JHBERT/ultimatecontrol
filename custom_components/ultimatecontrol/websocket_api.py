@@ -414,6 +414,8 @@ async def ws_host_folders(
             ("readonly", "readwrite", "unlinked")
         ),
         vol.Optional("autostart", default=False): bool,
+        vol.Optional("autostart_method", default="prg"): vol.In(("prg", "keyboard")),
+        vol.Optional("load_command"): str,
     }
 )
 @websocket_api.async_response
@@ -427,12 +429,18 @@ async def ws_image_play(
     which also accept an attachment. Nothing has to be copied to the Ultimate
     beforehand.
 
-    With ``autostart`` the first PRG of the disk is pulled out of the image and
-    handed to ``run_prg``, which loads and runs it in one go - the autorun a
-    disk does not have on its own.
+    With ``autostart`` the disk is started. ``autostart_method`` picks how:
+
+    ``prg`` (default) pulls the first PRG out of the image and hands it to
+    ``run_prg``, which loads and runs it in one go. ``keyboard`` resets the
+    machine and types ``LOAD"*",8,1`` plus RETURN into the KERNAL keyboard
+    buffer over ``writemem`` - that is the classic way, and it also works for
+    an image whose directory cannot be read here.
     """
     from .const import DISK_EXTENSIONS
     from .d64 import D64Error, D64Image
+    from .const import KEYBOARD_DELAY
+    from .keyboard import load_command
 
     runtime = _runtime(hass, msg["entry_id"])
     library = _library(runtime)
@@ -458,14 +466,23 @@ async def ws_image_play(
             )
             action = "mount"
             if msg["autostart"] and suffix in (".d64", ".d71"):
-                try:
-                    entry, program = D64Image(data).first_prg()
-                except D64Error as err:
-                    connection.send_error(msg["id"], "no_autostart", str(err))
-                    return
-                await runtime.api.async_run_prg_bytes(program)
-                action = "mount+run"
-                started = entry.name
+                if msg.get("autostart_method", "prg") == "keyboard":
+                    command = msg.get("load_command") or load_command()
+                    await runtime.api.async_reset()
+                    # Der C64 braucht einen Moment, bis der READY-Prompt steht.
+                    await asyncio.sleep(KEYBOARD_DELAY)
+                    await runtime.api.async_type_text(command)
+                    action = "mount+type"
+                    started = command
+                else:
+                    try:
+                        entry, program = D64Image(data).first_prg()
+                    except D64Error as err:
+                        connection.send_error(msg["id"], "no_autostart", str(err))
+                        return
+                    await runtime.api.async_run_prg_bytes(program)
+                    action = "mount+run"
+                    started = entry.name
         elif suffix == ".prg":
             await runtime.api.async_run_prg_bytes(data)
             action = "run_prg"
@@ -497,6 +514,7 @@ async def ws_image_play(
             "kind": suffix.lstrip("."),
             "action": action,
             "started": started,
+            "method": msg.get("autostart_method", "prg") if msg["autostart"] else None,
         },
     )
 

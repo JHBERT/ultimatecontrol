@@ -46,3 +46,12 @@ RUNNABLE_EXTENSIONS = (
 SONG_SEPARATOR = "#"
 
 MANUFACTURER = "Gideon Zweijtzer / Ultimate"
+
+# Nach einem Reset dauert es einen Moment, bis der C64 am READY-Prompt steht und
+# die Tastaturpuffer-Zeichen annimmt.
+KEYBOARD_DELAY = 2.0
+# Pause between two pieces of a longer line in the keyboard buffer.
+KEYBOARD_CHUNK_DELAY = 0.15
+# The KERNAL's keyboard buffer and its length byte.
+KEYBOARD_BUFFER = 0x0277
+KEYBOARD_LENGTH = 0x00C6

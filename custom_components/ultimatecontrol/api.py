@@ -35,7 +35,15 @@ from aiohttp import (
     FormData,
 )
 
-from .const import DEFAULT_PORT, DEFAULT_TIMEOUT, MAX_SSL_BYTES, RUNNER_TIMEOUT
+from .const import (
+    DEFAULT_PORT,
+    DEFAULT_TIMEOUT,
+    KEYBOARD_BUFFER,
+    KEYBOARD_CHUNK_DELAY,
+    KEYBOARD_LENGTH,
+    MAX_SSL_BYTES,
+    RUNNER_TIMEOUT,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -542,6 +550,37 @@ class UltimateApi:
     # ------------------------------------------------------------------
     # machine
     # ------------------------------------------------------------------
+    async def async_writemem(self, address: int, data: bytes) -> None:
+        """Write bytes into C64 memory over DMA (``PUT /v1/machine:writemem``).
+
+        The endpoint takes at most 128 bytes per call and wants them as hex, so
+        longer blocks are split.
+        """
+        from .keyboard import MAX_WRITEMEM
+
+        for start in range(0, len(data), MAX_WRITEMEM):
+            chunk = data[start : start + MAX_WRITEMEM]
+            await self._request(
+                "PUT",
+                "/v1/machine:writemem",
+                params={"address": f"{address + start:04X}", "data": chunk.hex().upper()},
+            )
+
+    async def async_type_text(self, text: str, enter: bool = True) -> None:
+        """Type text into the C64 keyboard buffer, as if it were typed.
+
+        The buffer holds ten characters, so a longer line goes in pieces with a
+        short pause between them - the KERNAL needs a moment to empty it.
+        """
+        from .keyboard import chunks
+
+        pieces = chunks(text, enter=enter)
+        for index, piece in enumerate(pieces):
+            await self.async_writemem(KEYBOARD_BUFFER, piece)
+            await self.async_writemem(KEYBOARD_LENGTH, bytes([len(piece)]))
+            if index + 1 < len(pieces):
+                await asyncio.sleep(KEYBOARD_CHUNK_DELAY)
+
     async def async_reset(self) -> None:
         """Send a reset to the machine."""
         await self._request("PUT", "/v1/machine:reset")
