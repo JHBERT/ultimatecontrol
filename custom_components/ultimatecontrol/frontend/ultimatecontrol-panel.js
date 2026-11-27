@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.2
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.3
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -1425,17 +1425,24 @@ class UltimateControlPanel extends HTMLElement {
     this._render();
   }
 
+  /* Zwei Klicks kurz hintereinander: die Antwort des ersten darf die des
+     zweiten nicht überschreiben, sonst steht die falsche Demo auf der Karte.
+     Deshalb zählt jede Anfrage mit, und nur die jüngste darf schreiben. */
   async _csdbOpenRelease(id) {
+    const seq = (this._csdbSeq = (this._csdbSeq || 0) + 1);
     this._csdbBusy = true;
     this._csdbRelease = { id, loading: true };
     this._render();
+    let release = null;
+    let error = null;
     try {
-      this._csdbRelease = await this._ws("csdb_release", { id });
-      this._error = null;
+      release = await this._ws("csdb_release", { id });
     } catch (err) {
-      this._error = err.message || String(err);
-      this._csdbRelease = null;
+      error = err.message || String(err);
     }
+    if (seq !== this._csdbSeq) return;
+    this._csdbRelease = release;
+    this._error = error;
     this._csdbBusy = false;
     this._render();
   }

@@ -254,3 +254,47 @@ def test_a_failure_says_what_came_back_instead(csdb):
     assert "No download answered with a ZIP archive" in message
     assert "a.zip" in message and "b.zip" in message
     assert "HTML instead of a ZIP" in message
+
+
+def test_a_release_gets_its_folder_from_type_group_name_and_year(csdb):
+    release = csdb.CsdbRelease(
+        id=82,
+        name="Piece of Cake",
+        type="C64 Demo",
+        date="1989",
+        groups=["Megastyle"],
+    )
+    assert csdb.release_folder(release) == "csdb/C64 Demo/M/Megastyle/Piece of Cake [1989]"
+
+
+def test_a_full_date_only_contributes_its_year(csdb):
+    release = csdb.CsdbRelease(
+        id=232976,
+        name="Next Level",
+        type="C64 Demo",
+        date="2023-06-03",
+        groups=["Performers"],
+    )
+    assert csdb.release_folder(release) == "csdb/C64 Demo/P/Performers/Next Level [2023]"
+
+
+def test_a_release_without_group_type_or_year_still_gets_a_folder(csdb):
+    release = csdb.CsdbRelease(id=1, name="Namenlos")
+    assert csdb.release_folder(release) == "csdb/Unbekannt/U/Unbekannt/Namenlos"
+
+
+def test_characters_a_folder_may_not_carry_are_replaced(csdb):
+    release = csdb.CsdbRelease(
+        id=2,
+        name='Doom/Quake: "Reloaded"?',
+        type="C64 Game",
+        date="1994",
+        groups=["A/B"],
+    )
+    folder = csdb.release_folder(release)
+    assert folder == 'csdb/C64 Game/A/A B/Doom Quake Reloaded [1994]'
+
+
+def test_the_initial_is_the_first_letter_of_the_group(csdb):
+    release = csdb.CsdbRelease(id=3, name="X", type="C64 Demo", groups=["fairlight"])
+    assert csdb.release_folder(release).split("/")[2] == "F"

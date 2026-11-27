@@ -395,6 +395,39 @@ async def async_fetch_text(session: Any, url: str) -> str:
 IMAGE_SUFFIXES = {".sid", ".d64", ".d71", ".d81", ".g64", ".g71", ".prg", ".crt"}
 
 
+# --------------------------------------------------------------------------- #
+# Where a release is stored
+# --------------------------------------------------------------------------- #
+
+# Characters a file name may not carry on Windows or on the ext4 of Home
+# Assistant OS, plus the ones CSDb likes to put in a title.
+_UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_SPACES = re.compile(r"\s+")
+
+
+def safe_name(name: str, fallback: str = "Unbenannt") -> str:
+    """A release name that can be a folder name on any of the two systems."""
+    cleaned = _SPACES.sub(" ", _UNSAFE.sub(" ", name or "")).strip(" .")
+    return cleaned or fallback
+
+
+def release_folder(release: "CsdbRelease", root: str = "csdb") -> str:
+    """The folder a release belongs in, as a path below the library.
+
+    ``csdb/<Type>/<initial>/<group>/<name> [<year>]``, for example
+    ``csdb/C64 Demo/M/Megastyle/Piece of Cake [1989]``. A release without a
+    group or a type still gets a folder, so nothing lands loose in the root.
+    """
+    kind = safe_name(release.type, "Unbekannt")
+    group = safe_name(release.groups[0] if release.groups else "", "Unbekannt")
+    initial = group[0].upper() if group[:1].isalnum() else "_"
+    name = safe_name(release.name)
+    year = (release.date or "")[:4]
+    if year.isdigit():
+        name = f"{name} [{year}]"
+    return f"{root}/{kind}/{initial}/{group}/{name}"
+
+
 def unpack_images(data: bytes, target: Any, overwrite: bool = False) -> list[str]:
     """Write every image of a release archive into ``target``.
 

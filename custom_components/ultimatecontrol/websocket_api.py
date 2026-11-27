@@ -1330,6 +1330,7 @@ async def ws_csdb_install(
         async_download_archive,
         async_fetch_text,
         parse_release,
+        release_folder,
     )
 
     runtime = _runtime(hass, msg["entry_id"])
@@ -1365,7 +1366,8 @@ async def ws_csdb_install(
     def _install() -> dict[str, Any]:
         from .csdb import unpack_images
 
-        folder = f"csdb/{release.id}"
+        # csdb/<Typ>/<Anfangsbuchstabe>/<Gruppe>/<Name> [<Jahr>]
+        folder = release_folder(release, msg["subfolder"].strip("/") or "csdb")
         target = library.library_dir / folder
         target.mkdir(parents=True, exist_ok=True)
         (target / link["name"]).write_bytes(data)
