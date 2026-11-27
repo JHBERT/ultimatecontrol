@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.1
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.2
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -1462,7 +1462,9 @@ class UltimateControlPanel extends HTMLElement {
         download: index,
         overwrite: true,
       });
-      this._flash = `${result.images.length} Datei(en) nach ${result.folder} entpackt`;
+      this._flash = result.images.length
+        ? `${result.images.length} Datei(en) aus ${result.archive} nach ${result.folder} entpackt`
+        : `${result.archive} entpackt, aber keine Diskette, kein Programm und kein SID darin`;
       this._csdbRelease = { ...this._csdbRelease, images: result.images, folder: result.folder };
     } catch (err) {
       this._error = err.message || String(err);

@@ -201,3 +201,56 @@ def test_unpack_images_keeps_existing_files_without_overwrite(csdb, tmp_path):
     assert (target / "a.d64").read_bytes() == b"old"
     csdb.unpack_images(buffer.getvalue(), target, overwrite=True)
     assert (target / "a.d64").read_bytes() == b"new"
+
+
+def test_a_page_instead_of_an_archive_is_recognised(csdb):
+    assert csdb.looks_like_zip(b"PK\x03\x04rest") is True
+    assert csdb.looks_like_zip(b"<!DOCTYPE html><html></html>") is False
+    assert csdb.looks_like_zip(b"") is False
+    described = csdb._describe(b"<html>blocked</html>", "text/html")
+    assert described.startswith("HTML instead of a ZIP")
+    assert "text/html" in described
+
+
+def test_the_second_link_is_used_when_the_first_answers_with_html(csdb):
+    import asyncio
+
+    links = [
+        {"url": "https://www.c64.com/demos/download.php?id=1368", "name": "download.php?id=1368"},
+        {"url": "https://csdb.dk/getinternalfile.php/16959/Piece of Cake.zip", "name": "Piece of Cake.zip"},
+    ]
+
+    async def fetch(session, url):
+        if "c64.com" in url:
+            return b"<!DOCTYPE html><html>blocked</html>", "text/html", ""
+        return b"PK\x03\x04zipdata", "application/octet-stream", ""
+
+    link, data = asyncio.run(csdb.async_download_archive(None, links, fetch=fetch))
+    assert link["name"] == "Piece of Cake.zip"
+    assert data.startswith(b"PK")
+
+
+def test_the_file_name_comes_from_the_content_disposition(csdb):
+    import asyncio
+
+    async def fetch(session, url):
+        return b"PK\x03\x04x", "application/octet-stream", "piece_of_cake_1.zip"
+
+    links = [{"url": "https://www.c64.com/x", "name": "download.php?id=1368"}]
+    link, _ = asyncio.run(csdb.async_download_archive(None, links, fetch=fetch))
+    assert link["name"] == "piece_of_cake_1.zip"
+
+
+def test_a_failure_says_what_came_back_instead(csdb):
+    import asyncio
+
+    async def fetch(session, url):
+        return b"<html>nope</html>", "text/html", ""
+
+    links = [{"url": "https://a/x", "name": "a.zip"}, {"url": "https://b/y", "name": "b.zip"}]
+    with pytest.raises(csdb.CsdbError) as err:
+        asyncio.run(csdb.async_download_archive(None, links, fetch=fetch))
+    message = str(err.value)
+    assert "No download answered with a ZIP archive" in message
+    assert "a.zip" in message and "b.zip" in message
+    assert "HTML instead of a ZIP" in message

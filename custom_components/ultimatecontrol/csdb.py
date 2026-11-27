@@ -35,6 +35,8 @@ RELEASE_URL = f"{CSDB_BASE}/webservice/?type=release&id={{release_id}}&depth=2"
 # expect, and a timeout keeps a slow site from holding a dashboard request.
 USER_AGENT = "Mozilla/5.0 (compatible; UltimateControl)"
 TIMEOUT = 15
+# A release archive is a few hundred kilobytes; a slow mirror gets longer.
+DOWNLOAD_TIMEOUT = 60
 # The front page changes when a release is added, so a few minutes are enough.
 CACHE_SECONDS = 300
 
@@ -419,6 +421,75 @@ def unpack_images(data: bytes, target: Any, overwrite: bool = False) -> list[str
                 out.write_bytes(archive.read(info))
             written.append(name)
     return written
+
+
+ZIP_MAGIC = b"PK\x03\x04"
+
+
+def looks_like_zip(data: bytes) -> bool:
+    """Whether these bytes are a ZIP archive and not an HTML page."""
+    return data[:4] == ZIP_MAGIC
+
+
+def _describe(data: bytes, content_type: str = "") -> str:
+    """A short, readable description of what came back instead of an archive."""
+    head = data[:60]
+    if head[:1] == b"<":
+        text = head.decode("utf-8", "replace").replace("\n", " ")
+        return f"HTML instead of a ZIP ({content_type or 'no type'}): {text}"
+    return f"{len(data)} bytes, starts with {head[:8]!r} ({content_type or 'no type'})"
+
+
+async def async_download_archive(
+    session: Any, downloads: list[dict[str, Any]], fetch: Any = None
+) -> tuple[dict[str, Any], bytes]:
+    """Fetch the first download link that really answers with a ZIP archive.
+
+    A release often carries several links, and the first one may point at
+    another site that answers with a page instead of the archive (a block, a
+    consent screen, a moved file). Each link is tried in turn; the errors of
+    all of them are collected, so a failure says what actually came back.
+    """
+    fetch = fetch or async_fetch_bytes
+    problems: list[str] = []
+    for link in downloads:
+        try:
+            data, content_type, filename = await fetch(session, link["url"])
+        except CsdbError as err:
+            problems.append(f"{link['name']}: {err}")
+            continue
+        if looks_like_zip(data):
+            name = filename or link["name"]
+            if not name.lower().endswith(".zip"):
+                name = f"{name}.zip"
+            return {**link, "name": name}, data
+        problems.append(f"{link['name']}: {_describe(data, content_type)}")
+    raise CsdbError("No download answered with a ZIP archive - " + "; ".join(problems))
+
+
+_FILENAME = re.compile(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', re.I)
+
+
+async def async_fetch_bytes(session: Any, url: str) -> tuple[bytes, str, str]:
+    """Fetch one file as bytes, with its content type and file name."""
+    try:
+        async with asyncio.timeout(DOWNLOAD_TIMEOUT):
+            async with session.get(url, headers={"User-Agent": USER_AGENT}) as resp:
+                if resp.status != 200:
+                    raise CsdbError(f"HTTP {resp.status}")
+                disposition = resp.headers.get("Content-Disposition", "")
+                found = _FILENAME.search(disposition)
+                return (
+                    await resp.read(),
+                    resp.headers.get("Content-Type", ""),
+                    found.group(1).strip() if found else "",
+                )
+    except CsdbError:
+        raise
+    except (TimeoutError, asyncio.TimeoutError) as err:
+        raise CsdbError("timed out") from err
+    except Exception as err:  # noqa: BLE001 - aiohttp, DNS, TLS
+        raise CsdbError(str(err)) from err
 
 
 class CsdbCache:

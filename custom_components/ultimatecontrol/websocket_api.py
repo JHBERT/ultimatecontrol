@@ -1324,7 +1324,13 @@ async def ws_csdb_install(
     archive lands in ``<library>/csdb/<release>/``; every image found in it is
     unpacked next to it, so the card can start it like any other library file.
     """
-    from .csdb import RELEASE_URL, CsdbError, async_fetch_text, parse_release
+    from .csdb import (
+        RELEASE_URL,
+        CsdbError,
+        async_download_archive,
+        async_fetch_text,
+        parse_release,
+    )
 
     runtime = _runtime(hass, msg["entry_id"])
     library = _library(runtime)
@@ -1343,26 +1349,16 @@ async def ws_csdb_install(
     if index < 0 or index >= len(release.downloads):
         connection.send_error(msg["id"], "no_download", f"No download {index}")
         return
-    link = release.downloads[index]
-
+    # Erst der gewählte Link, dann die übrigen: mancher Fremd-Host antwortet
+    # mit einer HTML-Seite statt mit dem Archiv.
+    ordered = [release.downloads[index]] + [
+        link for i, link in enumerate(release.downloads) if i != index
+    ]
     try:
-        async with asyncio.timeout(60):
-            async with async_get_clientsession(hass).get(
-                link["url"],
-                headers={"User-Agent": "Mozilla/5.0 (compatible; UltimateControl)"},
-            ) as resp:
-                if resp.status != 200:
-                    connection.send_error(
-                        msg["id"],
-                        "download_failed",
-                        f"HTTP {resp.status} for {link['url']}",
-                    )
-                    return
-                data = await resp.read()
-    except (TimeoutError, asyncio.TimeoutError):
-        connection.send_error(msg["id"], "download_failed", "The download timed out")
-        return
-    except Exception as err:  # noqa: BLE001 - aiohttp, DNS, TLS
+        link, data = await async_download_archive(
+            async_get_clientsession(hass), ordered
+        )
+    except CsdbError as err:
         connection.send_error(msg["id"], "download_failed", str(err))
         return
 
