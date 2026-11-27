@@ -261,3 +261,20 @@ Was von anderen stammt (Schnittstellen, Formate, Daten, Anregungen) und was
 nicht, steht in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Kurz:
 **kein fremder Code im Repository**, keine mitgelieferten Fremdbibliotheken,
 keine HVSC-Daten im Paket.
+
+## Danksagung
+
+Danke an **Gideon Zweijtzer** für die 1541 Ultimate und die Ultimate 64 und für
+die offene, gut dokumentierte REST-Schnittstelle
+(<https://1541u-documentation.readthedocs.io>) – ohne beides gäbe es diese
+Integration nicht.
+
+Danke an **Parifraktik** für die Arbeit am C64 und die Hilfsbereitschaft in der
+Szene.
+
+Danke an das **Commodore-Team und die Community**, die diesen Computer seit über
+vierzig Jahren am Leben halten.
+
+Danke an die **High Voltage SID Collection** (<https://hvsc.c64.org>) für die
+Songlängen-Datenbank und über 61 000 SIDs, und an **CSDb**
+(<https://csdb.dk>) für das größte Archiv der C64-Szene.

@@ -19,3 +19,33 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Danksagung
+
+Dieser Abschnitt ist kein Teil der Lizenz above, sondern ein Dank an die
+Menschen, ohne die dieses Projekt nicht existieren würde.
+
+Gideon Zweijtzer danken wir für die 1541 Ultimate und die Ultimate 64: Hardware,
+die einen Commodore 64 heute noch benutzbar macht, und eine offene, gut
+dokumentierte REST-Schnittstelle, ohne die diese Integration nicht möglich wäre.
+Dass die Dokumentation so vollständig ist, ist keine Selbstverständlichkeit.
+
+Parifraktik danken wir für die Arbeit an und mit dem C64 und für die
+Hilfsbereitschaft in der Szene.
+
+Dem Commodore-Team und der ganzen Community danken wir dafür, dass sie diesen
+Computer seit über vierzig Jahren am Leben halten: für Hard- und Software, für
+Wissen, für Geduld mit Fragen und für die Freude an einer Maschine, die eigentlich
+längst fertig war.
+
+Der High Voltage SID Collection (https://hvsc.c64.org) danken wir für die
+Songlängen-Datenbank und die über 61.000 SIDs, die sie zusammengetragen hat. Ohne
+diese Sammlung wüsste niemand, wann ein Tune zu Ende ist.
+
+Dem Team von CSDb (https://csdb.dk) danken wir für das größte Archiv der
+C64-Szene: Releases, Gruppen, Scener und SIDs an einem Ort, durchsuchbar und
+offen zugänglich.
+
+Danke.

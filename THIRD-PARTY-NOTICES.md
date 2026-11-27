@@ -75,7 +75,28 @@ Code** daraus übernommen:
   Entwicklerrichtlinien (`config_flow`, `DataUpdateCoordinator`, `media_source`,
   eigene Lovelace-Ressource).
 
-## 6. Eigener Code, eigene Fehler
+## 6. Danksagung
+
+Dieses Projekt steht auf den Schultern anderer. Danken möchten wir ausdrücklich:
+
+- **Gideon Zweijtzer** – für die 1541 Ultimate und die Ultimate 64 und für eine
+  REST-Schnittstelle, die so gut dokumentiert ist, dass man sie nachbauen kann
+  (<https://1541u-documentation.readthedocs.io>). Ohne diese Hardware und diese
+  Dokumentation gäbe es UltimateControl nicht.
+- **Parifraktik** – für die Arbeit am und mit dem C64 und für die Hilfsbereitschaft
+  in der Szene.
+- **Dem Commodore-Team und der Community** – dafür, dass der C64 seit über
+  vierzig Jahren lebt: Hardware, Software, Wissen, Geduld und Freude an einer
+  Maschine, die längst fertig war.
+- **Der High Voltage SID Collection** (<https://hvsc.c64.org>) – für die
+  Songlängen-Datenbank und über 61.000 zusammengetragene SIDs. Ohne diese
+  Sammlung wüsste niemand, wann ein Tune zu Ende ist.
+- **CSDb** (<https://csdb.dk>) – für das größte Archiv der C64-Szene: Releases,
+  Gruppen, Scener und SIDs an einem Ort, durchsuchbar und offen zugänglich.
+
+Danke.
+
+## 7. Eigener Code, eigene Fehler
 
 Der Ablauf der Ordner-Warteschlange mit Timer in Home Assistant, die
 Playlists, das Lesen des Haupt-Tunes aus dem SID-Kopf und die Karte sind eigene
