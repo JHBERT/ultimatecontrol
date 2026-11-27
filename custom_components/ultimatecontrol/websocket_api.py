@@ -413,6 +413,7 @@ async def ws_host_folders(
         vol.Optional("mode", default="readonly"): vol.In(
             ("readonly", "readwrite", "unlinked")
         ),
+        vol.Optional("autostart", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -425,8 +426,13 @@ async def ws_image_play(
     takes the image as the request body); PRG and CRT go through the runners,
     which also accept an attachment. Nothing has to be copied to the Ultimate
     beforehand.
+
+    With ``autostart`` the first PRG of the disk is pulled out of the image and
+    handed to ``run_prg``, which loads and runs it in one go - the autorun a
+    disk does not have on its own.
     """
     from .const import DISK_EXTENSIONS
+    from .d64 import D64Error, D64Image
 
     runtime = _runtime(hass, msg["entry_id"])
     library = _library(runtime)
@@ -436,6 +442,7 @@ async def ws_image_play(
         connection.send_error(msg["id"], "not_found", str(err))
         return
     suffix = path.suffix.lower()
+    started: str | None = None
     try:
         data = await hass.async_add_executor_job(path.read_bytes)
     except OSError as err:
@@ -450,6 +457,15 @@ async def ws_image_play(
                 image_type=suffix.lstrip("."),
             )
             action = "mount"
+            if msg["autostart"] and suffix in (".d64", ".d71"):
+                try:
+                    entry, program = D64Image(data).first_prg()
+                except D64Error as err:
+                    connection.send_error(msg["id"], "no_autostart", str(err))
+                    return
+                await runtime.api.async_run_prg_bytes(program)
+                action = "mount+run"
+                started = entry.name
         elif suffix == ".prg":
             await runtime.api.async_run_prg_bytes(data)
             action = "run_prg"
@@ -480,6 +496,7 @@ async def ws_image_play(
             "name": path.name,
             "kind": suffix.lstrip("."),
             "action": action,
+            "started": started,
         },
     )
 

@@ -214,8 +214,15 @@ Neben SIDs zeigt die Karte jetzt auch **D64/D71/D81/G64/G71**, **PRG** und
 
 Es muss also nichts vorher per FTP auf das Ultimate kopiert werden. Der
 Websocket-Befehl heißt `ultimatecontrol/image_play` (`path`, `source`, optional
-`drive` und `mode`). Nach dem Einlegen bleibt das Laufwerk bestückt; der Start
-erfolgt wie beim C64 üblich von Hand (`LOAD"*",8,1`).
+`drive`, `mode` und `autostart`).
+
+### Autostart einer Diskette (ab 1.4.0)
+
+Die Karte legt eine Diskette ein **und startet sie**: aus dem Image wird das
+erste PRG gelesen (`d64.py`) und über `POST /v1/runners:run_prg` geladen und
+gestartet – das ist der Autostart, den die API für Disketten selbst nicht hat.
+Die Diskette bleibt dabei in Laufwerk A eingelegt, Nachladen funktioniert also.
+Mit `autostart: false` wird nur eingelegt.
 
 ## Mehrere Geräte in einer Karte (ab 1.2.0)
 
