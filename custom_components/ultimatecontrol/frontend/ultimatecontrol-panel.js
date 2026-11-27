@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.5
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.6
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -1337,7 +1337,8 @@ class UltimateControlPanel extends HTMLElement {
               : `<div class="title">${this._esc(this._config.title)}</div>`
           }
           <div class="tabs">
-            <button data-src="library" class="${view.source !== "favorites" ? "on" : ""}">HVSC</button>
+            <button data-src="library" class="${view.source !== "favorites" ? "on" : ""}"
+                    title="Bibliothek: config/ultimatecontrol/DATA">DATA</button>
             <button data-src="favorites" class="${view.source === "favorites" ? "on" : ""}">★ Favoriten</button>
             <button data-playlists="1" title="Playlists ansehen">Playlists${
               this._playlists && this._playlists.length ? ` (${this._playlists.length})` : ""
