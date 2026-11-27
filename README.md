@@ -1,105 +1,70 @@
-# UltimateControl
+# 🕹️ UltimateControl for Home Assistant
 
-Home Assistant custom integration for a Commodore 64 with a **1541 Ultimate II+**
-cartridge (also works with the Ultimate 64 / Ultimate 64 Elite mainboards).
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-The integration talks to the device's REST API (firmware 3.11 or newer, *Web
-Remote Control* enabled in the Ultimate menu) and gives you:
+**UltimateControl** is a custom Home Assistant integration that brings your **Commodore 64** equipped with an **Ultimate-II+** cartridge (or Ultimate 64) straight into your smart home. Play authentic SID music directly on real hardware, browse the High Voltage SID Collection (HVSC), and launch `.d64` disk images or demos without leaving your couch.
 
-* a **media player** entity that plays SID files on the real C64, runs PRG and
-  CRT files, mounts D64/D71/D81 disk images on drive A, and can reset, pause
-  and resume the machine,
-* a **media browser source** ("Ultimate C64") that browses the file system of
-  the device – your HVSC copy on the USB stick or SD card included – from the
-  Home Assistant UI, a phone or a tablet,
-* **HVSC song lengths**: with the Songlengths database in place, a SID stops
-  being reported as playing when the tune is over,
+---
+
+## ✨ Features
+
+* **Real Hardware SID Playback:** Send `.sid` files directly to your Ultimate-II+ / C64 and enjoy genuine 6581/8580 sound through your stereo system.
+* **HVSC Support:** Browse and play tunes from the High Voltage SID Collection.
+* **Disk & Demo Launcher:** Mount and run `.d64` images directly via Home Assistant services or dashboard buttons.
+* **Smart Home Automation Ready:** Trigger your favorite chiptune when you get home, start a demo on movie/retro night, or control playback via Lovelace media player cards.
+
+Beyond that, the integration gives you:
+
+* a **media player** entity that plays SID files on the real C64, runs PRG and CRT files, mounts D64/D71/D81 disk images on drive A, and can reset, pause and resume the machine,
+* a **media browser source** ("Ultimate C64") that browses the file system of the device — your HVSC copy on the USB stick or SD card included — from the Home Assistant UI, a phone or a tablet,
+* **HVSC song lengths**: with the Songlengths database in place, a SID stops being reported as playing when the tune is over,
+* a **dashboard card** with a library browser, favourites, playlists, a folder queue and a CSDb tab,
 * a **config flow**: set the device up in the UI, no YAML.
 
+---
 
-### Karte konfigurieren (ab 0.5.0)
-Beim Hinzufügen der Karte öffnet sich ein Dialog mit einem **Geräte-Dropdown**
-(alle eingerichteten Ultimates, „Automatisch“ = erstes Gerät) und einem
-Titel-Feld. In YAML bleibt `entry_id` optional.
+## 📖 The Story Behind UltimateControl
 
-### SIDs importieren (ab 0.5.0)
-Der Knopf **＋** in der Karte öffnet einen Ordner-Browser für den
-Home-Assistant-Rechner: mit `↑` nach oben, Ordner antippen, unten steht, wie viele
-SID-Dateien drin liegen; „Diesen Ordner importieren“ kopiert sie (samt
-Unterordnern) in die Bibliothek. Derselbe Vorgang per Service:
-`ultimatecontrol.import_folder`.
+Ever since the **HardSID** hit the market back in the day, I’ve been looking for a way to enjoy real SID chip tunes on my proper hi-fi setup. Due to a rather tight budget at the time, my chance to grab a HardSID passed me by. The love for the SID, however, never faded.
 
-## SID-Auswahl im Dashboard (ab 0.4.0)
+Fast forward about 20 years: armed with an **Ultimate-II+**, a **C64CU**, and my **Home Assistant** setup — *BOOM!* One man and his SID: **UltimateControl** was born. 
 
-Die Integration bringt eine eigene Lovelace-Card mit: HVSC durchsuchen, einen
-Tune wählen, auf dem C64 abspielen, Favoriten pflegen.
+I’m fully aware that this is a massive niche, but maybe a few fellow retro nerds out there will have just as much fun with this integration as I do. 
 
-**Card hinzufügen**
+And hey — **don't buy me a coffee, buy me a beer instead** at one of the next demoscene parties! Just look out for **Hbert** ;-) (most probably standing right next to **Rayden** ;-) ).
 
-```yaml
-type: custom:ultimatecontrol-panel
-entry_id: <ID des Geräts>      # optional; sonst nimmt die Card das einzige Gerät
-title: Ultimate 2 Cartridge
-```
+> *Rayden, thanks for sharing the love for the SID and the C64 with me! It’s entirely your fault that I’m infected with this virus!* 🍻
 
-`entry_id` akzeptiert die Config-Entry-ID, die `unique_id` des Geräts (z. B.
-`415204`) oder einen Teil des Namens; ohne Angabe wird das einzige eingerichtete
-Gerät genommen.
+---
 
-Die Card wird von der Integration selbst ausgeliefert
-(`/ultimatecontrol_panel/ultimatecontrol-panel.js`) und seit 0.4.2 **automatisch
-als Lovelace-Ressource eingetragen** – im UI-Modus musst du nichts tun. Nur wenn
-dein Dashboard im YAML-Modus läuft, gehört die Ressource in deine
-`configuration.yaml`:
+## ⚙️ Prerequisites
 
-```yaml
-lovelace:
-  resources:
-    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=0.5.0
-      type: module
-```
+1. A **Commodore 64** with an **Ultimate-II+** cartridge (or an **Ultimate 64**) connected to your local network.
+2. **Network Interface / REST API** enabled on your Ultimate device.
+3. **Home Assistant** (with [HACS](https://hacs.xyz/) recommended for easy installation).
 
-Im UI-Modus: Einstellungen → Dashboards → ⋮ → Ressourcen → URL oben eintragen,
-Typ „JavaScript-Modul“.
+---
 
-**Was die Card kann**
+## 🚀 Installation
 
-| Aktion | Wie |
-| --- | --- |
-| HVSC/Bibliothek durchsuchen | Reiter **HVSC**, Ordner antippen |
-| Tune wählen | Datei mit mehreren Tunes antippen → Tune-Knöpfe mit Länge |
-| Abspielen | Tune-Knopf antippen; die Datei wird zum C64 gestreamt |
-| Favorit hinzufügen | Knopf **★ Favorit** in der Zeile „läuft gerade“ |
-| Favoriten anhören | Reiter **★ Favoriten** |
+### Option 1: HACS (Custom Repository)
+1. Open **HACS** in your Home Assistant instance.
+2. Click the three dots in the top right corner and select **Custom repositories**.
+3. Add the URL `https://github.com/JHBERT/ultimatecontrol` and select **Integration** as the category.
+4. Search for **UltimateControl**, click **Download**, and restart Home Assistant.
 
-**Ordner auf dem HA-Rechner**
+### Option 2: Manual Installation
+1. Copy the `custom_components/ultimatecontrol` folder into your Home Assistant's `config/custom_components/` directory.
+2. Restart Home Assistant.
 
-| Ordner | Inhalt |
-| --- | --- |
-| `config/ultimatecontrol/DATA` | Bibliothek (HVSC, Disks, Programme); Unterordner erlaubt |
-| `config/ultimatecontrol/favorites` | Favoriten (Kopien aus der Bibliothek) |
-| `config/ultimatecontrol/Songlengths.md5` | optionale HVSC-Songlängen |
+After a HACS update, restart Home Assistant and reload the dashboard hard
+(Ctrl+F5) so the browser picks up the new card version.
 
-Deinen Favoriten-Ordner einmalig übernehmen: Einstellungen → Integrationen →
-UltimateControl → **Konfigurieren** → *Favourites folder* auf den Pfad setzen
-(z. B. `/config/media/favoriten`). Beim Speichern werden alle `.sid`-Dateien
-hineinkopiert.
+---
 
-**Songlängen**: werden beim Abspielen mitgeschickt und aus der HVSC-Datei
-`Songlengths.md5` per MD5 gelesen – Untertune-genau, auch für Dateien, die nur
-als Stream zum C64 gehen.
+## 🔧 Configuration
 
-## Installation (HACS)
-
-1. HACS → *Integrations* → three-dot menu → *Custom repositories*
-2. Add `https://github.com/JHBERT/ultimatecontrol`, category *Integration*
-3. Install **UltimateControl C64** and restart Home Assistant
-4. *Settings → Devices & services → Add integration → UltimateControl C64*
-
-Manual install: copy `custom_components/ultimatecontrol` into your
-`config/custom_components/` folder and restart.
-
-## Configuration
+*Settings → Devices & services → Add integration → UltimateControl*
 
 | Field | Meaning |
 | --- | --- |
@@ -109,22 +74,218 @@ Manual install: copy `custom_components/ultimatecontrol` into your
 | Name | Name of the device in Home Assistant |
 
 The options flow (*Configure*) holds the status polling interval (default 30 s)
-and lets you change the network password.
+and lets you change the network password. Several Ultimates can be added; each
+one becomes its own device with its own media player entity.
 
-## Using it
+---
 
-The integration creates one device with one media player entity.
+## 🗂️ Data folders on the Home Assistant host
 
-### From the media browser
+The Ultimate cannot download or store files over REST, so anything that is not
+already on the device is kept on the Home Assistant host and streamed to the C64
+when it is played.
+
+| Folder | Content |
+| --- | --- |
+| `config/ultimatecontrol/DATA` | The library: SIDs, disks, programs, cartridges, CSDb releases; sub-folders allowed |
+| `config/ultimatecontrol/favorites` | Favourites (copies taken out of the library) |
+| `config/ultimatecontrol/playlists` | Playlists (references only, one JSON file per playlist) |
+| `config/ultimatecontrol/Songlengths.md5` | Optional HVSC song length database |
+
+Up to 1.7.4 the library folder was called `sids`. On startup the integration
+renames an existing `config/ultimatecontrol/sids` to `DATA` once; if a `DATA`
+folder already exists it wins and the old folder is left untouched.
+
+To take over an existing favourites folder: *Settings → Devices & services →
+UltimateControl → Configure → Favourites folder* and point it at the path (for
+example `/config/media/favorites`). On save every `.sid` file is copied in.
+
+---
+
+## 🎛️ The dashboard card
+
+The integration brings its own Lovelace card: browse the library, pick a tune,
+play it on the C64, keep favourites, build playlists, queue a whole folder and
+browse CSDb.
+
+```yaml
+type: custom:ultimatecontrol-panel
+entry_id: <device entry id>      # optional; otherwise the only device is used
+title: Ultimate 2 Cartridge
+autostart_method: prg            # prg | keyboard | none
+device_picker: true              # show the device dropdown even with entry_id
+```
+
+`entry_id` accepts the config entry id, the `unique_id` of the device (for
+example `415204`) or part of its name; without it the only configured device is
+used.
+
+The card is served by the integration itself
+(`/ultimatecontrol_panel/ultimatecontrol-panel.js`) and is registered as a
+Lovelace resource automatically. Only a dashboard in YAML mode needs the
+resource in `configuration.yaml`:
+
+```yaml
+lovelace:
+  resources:
+    - url: /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.6
+      type: module
+```
+
+In UI mode: *Settings → Dashboards → ⋮ → Resources*, enter the URL and pick
+“JavaScript module”.
+
+### What the card can do
+
+| Action | How |
+| --- | --- |
+| Browse the library | Tab **DATA**, tap a folder |
+| Pick a tune | Tap a file with several tunes → tune buttons with their length |
+| Play | Tap a tune button; the file is streamed to the C64 |
+| Add a favourite | **★ Favorit** in the “now playing” row |
+| Listen to favourites | Tab **★ Favoriten** |
+| Import a folder | **＋** opens a folder browser of the Home Assistant host |
+| Queue a folder | **▶ Ordner abspielen** plays every SID of the folder in turn |
+| Playlists | Tab **Playlists**: create, fill, reorder, play |
+| Demos from CSDb | Tab **CSDb**: latest releases, top demos, release page, download |
+| Choose the device | Dropdown in the header when several Ultimates are configured |
+
+Selecting a sub-tune or opening the tune list never rebuilds the list, so the
+scroll position stays where it is.
+
+### Importing SIDs
+
+The **＋** button opens a folder browser for the Home Assistant host: `↑` goes
+up, tap a folder, the bottom line says how many SID files it holds; “Diesen
+Ordner importieren” copies them, sub-folders included, into the library. The
+same thing as a service: `ultimatecontrol.import_folder`.
+
+---
+
+## 🎵 Song lengths
+
+Song lengths are sent along with the upload and read from the HVSC file
+`Songlengths.md5` by MD5 — sub-tune accurate, also for files that only travel to
+the C64 as a stream. Put the database in `config/ultimatecontrol/`:
+
+* `Songlengths.md5` from the HVSC (`C64Music/DOCUMENTS/Songlengths.md5`), or
+* a faster JSON version, built once with
+
+  ```
+  python tools/build_songlengths.py Songlengths.md5 Songlengths.json
+  ```
+
+The card's footer shows the local HVSC release, offers **Prüfen** to ask a
+mirror for a newer one and **Holen** to download the database. Without the
+database a SID simply keeps playing on the C64 until it is stopped or another
+file is started.
+
+The player on the device takes the length as a second `file` part of the
+multipart request to `/v1/runners:sidplay`: two packed BCD bytes (minutes,
+seconds) per sub-tune, 512 bytes at most.
+
+---
+
+## 💾 Disks, programs and cartridges
+
+The card shows **D64/D71/D81/G64/G71**, **PRG** and **CRT** from the library
+next to the SIDs. A click uploads the file and starts it:
+
+| File | Call on the device |
+| --- | --- |
+| D64, D71, D81, G64, G71 | `POST /v1/drives/a:mount` with the image as body (mode `readonly`) |
+| PRG | `POST /v1/runners:run_prg` with the file as attachment |
+| CRT | `POST /v1/runners:run_crt` with the file as attachment |
+
+Nothing has to be copied to the Ultimate over FTP first. The websocket command
+is `ultimatecontrol/image_play` (`path`, `source`, optional `drive`, `mode` and
+`autostart`).
+
+### Disk autostart
+
+The card inserts a disk **and starts it**: the first PRG is read out of the image
+(`d64.py`) and loaded through `POST /v1/runners:run_prg` — the autostart the API
+does not offer for disks itself. The disk stays in drive A, so loading further
+files works. With `autostart: false` it is only inserted.
+
+`autostart_method: keyboard` starts a disk the way you would by hand: the
+machine is reset, then the integration types `LOAD"*",8,1` and RETURN into the
+KERNAL keyboard buffer (`PUT /v1/machine:writemem` at `$0277`, length at
+`$00C6`). That is the classic route and also works for images whose directory
+cannot be read here. The command can be overridden with `load_command` (for
+example `LOAD"DEMO",8,1`). In the card `autostart_method: keyboard|prg` switches
+between the two; the default is `prg`.
+
+### Multi-part demos: insert only
+
+`autostart_method: none` inserts the disk and starts nothing. That is what
+multi-part demos need: the running demo asks for the next disk and the swap is
+only a mount — no reset, no `LOAD`. Set it in the card configuration or send
+`autostart_method: "none"` over the websocket.
+
+---
+
+## ⏭️ Folder queue
+
+**▶ Ordner abspielen** puts every SID of the current folder into a queue and
+plays them one after another. The timer lives in Home Assistant: one background
+task per tune with a generation counter, the end time in the entity state. The
+bar in the card has ⏮ ⏭ ⏸ ⏹. Websocket commands:
+`ultimatecontrol/queue_play_folder`, `queue_action`, `queue_status`; the service
+`ultimatecontrol.restore_queue` restores the queue after a restart.
+
+---
+
+## 🎼 Playlists
+
+The **Playlists** tab keeps named lists that store references only, never copies
+of the SIDs — one JSON file per playlist under
+`config/ultimatecontrol/playlists`. Websocket commands:
+`ultimatecontrol/playlists`, `playlist_get`, `playlist_add`, `playlist_edit`,
+`playlist_play`.
+
+---
+
+## 🖥️ Several devices in one card
+
+When several Ultimates are configured and the card has **no** `entry_id`, the
+header shows a **dropdown** to pick the player. Folder, queue, playlists and the
+running tune each belong to the selected device, and the browser remembers the
+choice. With `entry_id` the card stays on one device (`device_picker: true`
+shows the dropdown anyway, `false` hides it).
+
+---
+
+## 🎬 CSDb (csdb.dk)
+
+The **CSDb** tab shows the two tables of the CSDb front page: **Latest
+Releases** and **Top Demos**, five entries each. A click on the heading opens
+the whole list (25 releases, or the complete demo chart), a click on an entry
+opens the release page with type, date, group, event and placing, rating,
+credits, the SIDs used, download links and the newest comments. **‹ Zurück** in
+the top left goes one level back.
+
+A download can be unpacked straight into the library
+(`config/ultimatecontrol/DATA/csdb/<Type>/<initial>/<Group>/<Name> [<Year>]/`)
+and started from there; the websocket commands are
+`ultimatecontrol/csdb_front`, `csdb_list`, `csdb_release` and `csdb_install`.
+Lists are cached for five minutes so a dashboard refresh does not load CSDb.
+
+CSDb has no search webservice, only a lookup by id, so the lists are parsed from
+the HTML of the pages and a release comes from
+`/webservice/?type=release&id=<id>&depth=2`.
+
+---
+
+## 🤖 Media browser, actions and automations
 
 *Media → Ultimate C64* shows the folders of the device (`/Usb0`, `/Sd`, ...).
-Open a folder, tap a `.sid` file → *Play* → pick the media player entity. The
-C64 starts playing it.
+Open a folder, tap a `.sid` file → *Play* → pick the media player entity. The C64
+starts playing it.
 
-For a specific sub tune, play `media-source://ultimatecontrol//Usb0/path/tune.sid#2`
-(`#2` = sub tune 2) through the `media_player.play_media` action.
-
-### From automations
+For a specific sub-tune, play
+`media-source://ultimatecontrol//Usb0/path/tune.sid#2` (`#2` = sub-tune 2)
+through the `media_player.play_media` action.
 
 ```yaml
 # Play a SID from the Ultimate's own file system
@@ -135,7 +296,7 @@ data:
   media_content_id: /Usb0/C64Music/MUSICIANS/H/Hubbard_Rob/Commando.sid
   media_content_type: music
 
-# Play sub tune 3 of that file
+# Play sub-tune 3 of that file
 data:
   media_content_id: "/Usb0/C64Music/MUSICIANS/H/Hubbard_Rob/Commando.sid#3"
 
@@ -155,146 +316,71 @@ Supported files: `.sid` (play), `.prg` / `.crt` (run), `.d64` `.d71` `.d81`
 `media_player.media_pause` / `media_player.media_play` freeze and continue the
 machine through the device's pause/resume API.
 
-## HVSC on Home Assistant instead of on the C64
+### HVSC on Home Assistant instead of on the C64
 
 If the HVSC lives on the Home Assistant host rather than on the Ultimate, put
-the folder in your config directory and play the files by their local path.
-The integration uploads the SID to `/Temp/UltimateControl` on the device and
-plays it from there.
+the folder in the library and play the files by their local path. The
+integration uploads the SID to `/Temp/UltimateControl` on the device and plays
+it from there.
 
-For song lengths, place the HVSC song length database in
-`config/ultimatecontrol/`:
+---
 
-* `Songlengths.md5` from the HVSC (`C64Music/DOCUMENTS/Songlengths.md5`), or
-* a faster JSON version, built once with
-
-  ```
-  python tools/build_songlengths.py Songlengths.md5 Songlengths.json
-  ```
-
-Without the database, a SID simply keeps playing on the C64 until it is stopped
-or another file is started.
-
-## Requirements and notes
+## 📌 Requirements and notes
 
 * Ultimate firmware **3.11+** (network password: 3.12+), *Web Remote Control*
   enabled, and the Home Assistant host must be able to reach the device over
   HTTP.
 * The C64 has no feedback channel, so the entity's state follows what Home
-  Assistant started: a SID is "playing" until its song length has passed, a
-  program or disk image leaves the entity "on". The device itself is polled
+  Assistant started: a SID is “playing” until its song length has passed, a
+  program or disk image leaves the entity “on”. The device itself is polled
   (`/v1/info`) so the entity becomes unavailable when it is switched off.
-* Browsing uses `GET /v1/files/<path>`. Firmware releases answer that route in
-  slightly different shapes; the client accepts the common ones. If your
-  firmware returns nothing useful there, playing by path still works.
-* Not implemented yet: FTP upload of large collections, Icecast streaming
-  (see the project notes), and mounting images on drive B.
+* Browsing the device uses FTP (`NLST`) plus the REST stat call; playing by path
+  works without a listing.
+* Not implemented yet: Icecast streaming, mounting images on drive B, importing
+  the full HVSC package (it ships as `.7z` with a BCJ2 filter that Python's
+  `lzma` cannot unpack).
 
-## Development
+---
+
+## 🛠️ Development
 
 ```
 pip install aiohttp pytest pytest-asyncio
 pytest -q
 ```
 
-The tests in `tests/` start a small aiohttp server that answers like an
-Ultimate device, so the API client, the request it builds and the song length
-parser are covered without hardware and without Home Assistant.
+The tests in `tests/` start a small aiohttp server that answers like an Ultimate
+device, so the API client, the request it builds and the song length parser are
+covered without hardware and without Home Assistant.
 
-## Disketten und Programme aus der Bibliothek (ab 1.3.0)
+---
 
-Neben SIDs zeigt die Karte jetzt auch **D64/D71/D81/G64/G71**, **PRG** und
-**CRT** aus der Bibliothek. Ein Klick lädt die Datei hoch und startet sie:
+## 📄 License
 
-| Datei | Aufruf am Gerät |
-|---|---|
-| D64, D71, D81, G64, G71 | `POST /v1/drives/a:mount` mit dem Image als Rumpf (Modus `readonly`) |
-| PRG | `POST /v1/runners:run_prg` mit der Datei als Anhang |
-| CRT | `POST /v1/runners:run_crt` mit der Datei als Anhang |
+UltimateControl is released under the **MIT license** — see [`LICENSE`](LICENSE).
+In short: use it, change it, pass it on, commercial use included; the copyright
+notice and the license text have to stay with it. No warranty.
 
-Es muss also nichts vorher per FTP auf das Ultimate kopiert werden. Der
-Websocket-Befehl heißt `ultimatecontrol/image_play` (`path`, `source`, optional
-`drive`, `mode` und `autostart`).
+What comes from others (interfaces, formats, data, ideas) and what does not is
+listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). In short: **no
+third-party code in the repository**, no bundled third-party libraries, no HVSC
+data in the package.
 
-### Autostart einer Diskette (ab 1.4.0)
+---
 
-Die Karte legt eine Diskette ein **und startet sie**: aus dem Image wird das
-erste PRG gelesen (`d64.py`) und über `POST /v1/runners:run_prg` geladen und
-gestartet – das ist der Autostart, den die API für Disketten selbst nicht hat.
-Die Diskette bleibt dabei in Laufwerk A eingelegt, Nachladen funktioniert also.
-Mit `autostart: false` wird nur eingelegt.
+## 🙏 Acknowledgements
 
-### Autostart per Tastatur (ab 1.5.0)
+Thanks to **Gideon Zweijtzer** for the 1541 Ultimate and the Ultimate 64 and for
+the open, well documented REST interface
+(<https://1541u-documentation.readthedocs.io>) — without both, this integration
+would not exist.
 
-`autostart_method: keyboard` startet eine Diskette wie von Hand: die Maschine
-wird zurückgesetzt, dann tippt die Integration `LOAD"*",8,1` und RETURN in den
-Tastaturpuffer des KERNAL (`PUT /v1/machine:writemem` auf `$0277`, Länge nach
-`$00C6`). Das ist der klassische Weg und funktioniert auch bei Images, deren
-Verzeichnis hier nicht lesbar ist. Der Befehl lässt sich mit `load_command`
-überschreiben (z. B. `LOAD"DEMO",8,1`). In der Karte schaltet
-`autostart_method: keyboard|prg` um; Standard ist `prg`.
+Thanks to Christian „Peri Fractic“ Simpson for the work on the C64 and for the
+help in the scene.
 
-### Mehrteilige Demos: nur einlegen (ab 1.6.0)
+Thanks to the **Commodore team and the community** who have kept this computer
+alive for more than forty years.
 
-`autostart_method: none` legt die Diskette ein und startet nichts. Genau das
-brauchen Demos mit mehreren Parts: das laufende Demo fordert die nächste Diskette
-an, und der Wechsel ist nur ein Mount – kein Reset, kein `LOAD`. In der Karte
-lässt sich das über die Konfiguration einstellen, per Websocket mit
-`autostart_method: "none"`.
-
-## Mehrere Geräte in einer Karte (ab 1.2.0)
-
-Sind mehrere Ultimates eingerichtet und die Karte hat **keine** `entry_id`,
-zeigt sie im Kopf ein **Dropdown** zur Wahl des Abspielgeräts. Ordner, Queue,
-Playlists und der laufende Tune gehören jeweils zum gewählten Gerät; die Wahl
-merkt sich der Browser. Mit `entry_id` bleibt die Karte fest an einem Gerät
-(`device_picker: true` zeigt das Dropdown trotzdem, `false` blendet es aus).
-
-## Lizenz
-
-UltimateControl steht unter der **MIT-Lizenz** – siehe [`LICENSE`](LICENSE).
-Kurz gesagt: benutzen, verändern, weitergeben und auch kommerziell einsetzen
-ist erlaubt; es muss nur der Copyright-Hinweis und der Lizenztext beiliegen.
-Keine Gewährleistung.
-
-Was von anderen stammt (Schnittstellen, Formate, Daten, Anregungen) und was
-nicht, steht in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Kurz:
-**kein fremder Code im Repository**, keine mitgelieferten Fremdbibliotheken,
-keine HVSC-Daten im Paket.
-
-## CSDb (csdb.dk)
-
-Der Tab **CSDb** in der Karte zeigt die zwei Tabellen der CSDb-Startseite:
-**Latest Releases** und **Top Demos**, jeweils mit den ersten fünf Einträgen.
-Ein Klick auf die Überschrift öffnet die ganze Liste (25 Releases bzw. der
-komplette Demo-Chart), ein Klick auf einen Eintrag die Seite der Demo mit Typ,
-Datum, Gruppe, Event und Platzierung, Rating, Credits, verwendeten SIDs,
-Download-Links und den neuesten Kommentaren. Oben links führt **‹ Zurück**
-jeweils eine Ebene zurück.
-
-Ein Download lässt sich direkt in die Bibliothek entpacken
-(`<config>/ultimatecontrol/DATA/csdb/<Typ>/<Anfangsbuchstabe>/<Gruppe>/<Name> [<Jahr>]/`) und von dort starten; die
-Websocket-Befehle heißen `ultimatecontrol/csdb_front`, `csdb_list`,
-`csdb_release` und `csdb_install`. Die Listen werden fünf Minuten
-zwischengespeichert, damit ein Dashboard-Refresh CSDb nicht belastet.
-
-CSDb hat keinen Such-Webservice, nur den Abruf einer einzelnen ID; die Listen
-kommen deshalb aus dem HTML der Seiten, eine Demo aus
-`/webservice/?type=release&id=<ID>&depth=2`.
-
-## Danksagung
-
-Danke an **Gideon Zweijtzer** für die 1541 Ultimate und die Ultimate 64 und für
-die offene, gut dokumentierte REST-Schnittstelle
-(<https://1541u-documentation.readthedocs.io>) – ohne beides gäbe es diese
-Integration nicht.
-
-Danke an Christian „Peri Fractic“ Simpson für die Arbeit am C64 und die Hilfsbereitschaft in der
-Szene.
-
-Danke an das **Commodore-Team und die Community**, die diesen Computer seit über
-vierzig Jahren am Leben halten.
-
-Danke an die **High Voltage SID Collection** (<https://hvsc.c64.org>) für die
-Songlängen-Datenbank und über 61 000 SIDs, und an **CSDb**
-(<https://csdb.dk>) für das größte Archiv der C64-Szene.
+Thanks to the **High Voltage SID Collection** (<https://hvsc.c64.org>) for the
+song length database and more than 61,000 SIDs, and to **CSDb**
+(<https://csdb.dk>) for the largest archive of the C64 scene.
