@@ -76,7 +76,7 @@ Typ „JavaScript-Modul“.
 
 | Ordner | Inhalt |
 | --- | --- |
-| `config/ultimatecontrol/sids` | Bibliothek (HVSC); Unterordner erlaubt |
+| `config/ultimatecontrol/DATA` | Bibliothek (HVSC, Disks, Programme); Unterordner erlaubt |
 | `config/ultimatecontrol/favorites` | Favoriten (Kopien aus der Bibliothek) |
 | `config/ultimatecontrol/Songlengths.md5` | optionale HVSC-Songlängen |
 
@@ -273,7 +273,7 @@ Download-Links und den neuesten Kommentaren. Oben links führt **‹ Zurück**
 jeweils eine Ebene zurück.
 
 Ein Download lässt sich direkt in die Bibliothek entpacken
-(`<config>/ultimatecontrol/sids/csdb/<Release-ID>/`) und von dort starten; die
+(`<config>/ultimatecontrol/DATA/csdb/<Typ>/<Anfangsbuchstabe>/<Gruppe>/<Name> [<Jahr>]/`) und von dort starten; die
 Websocket-Befehle heißen `ultimatecontrol/csdb_front`, `csdb_list`,
 `csdb_release` und `csdb_install`. Die Listen werden fünf Minuten
 zwischengespeichert, damit ein Dashboard-Refresh CSDb nicht belastet.

@@ -25,8 +25,8 @@ RUNNER_TIMEOUT = 30
 # bytes (minutes, seconds) per sub tune, 256 sub tunes at most.
 MAX_SSL_BYTES = 512
 
-# Sub-directory of the Home Assistant config dir: the local SID library
-# (``sids``), the favourites (``favorites``) and the song length database.
+# Sub-directory of the Home Assistant config dir: the local library
+# (``DATA``), the favourites (``favorites``) and the song length database.
 SID_CACHE_DIR = "ultimatecontrol"
 
 # File extensions the media browser exposes.

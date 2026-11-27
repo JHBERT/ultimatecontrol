@@ -125,3 +125,44 @@ def test_find_moved_favorite_by_name(library: SidLibrary):
     assert library.find("favorites", "deep.sid").name == "deep.sid"
     with pytest.raises(SidLibraryError):
         library.find("library", "deep.sid")
+
+
+def test_the_library_lives_in_data(tmp_path: Path):
+    """The library folder is called DATA, not sids."""
+    lib = SidLibrary(tmp_path)
+    lib.ensure_dirs()
+    assert lib.library_dir == tmp_path / "DATA"
+    assert lib.library_dir.is_dir()
+    assert not (tmp_path / "sids").exists()
+
+
+def test_an_old_sids_folder_is_renamed(tmp_path: Path):
+    """A collection from 1.7.4 and earlier is moved, not left behind."""
+    old = tmp_path / "sids" / "MUSICIANS" / "H" / "Hubbard"
+    old.mkdir(parents=True)
+    (old / "Commando.sid").write_bytes(sid_bytes(1))
+
+    lib = SidLibrary(tmp_path)
+    lib.ensure_dirs()
+
+    moved = tmp_path / "DATA" / "MUSICIANS" / "H" / "Hubbard" / "Commando.sid"
+    assert moved.is_file()
+    assert not (tmp_path / "sids").exists()
+    assert [entry["name"] for entry in lib.list_dir("library", "MUSICIANS/H/Hubbard")] == [
+        "Commando.sid"
+    ]
+
+
+def test_an_existing_data_folder_wins_over_the_old_one(tmp_path: Path):
+    """Both folders present: DATA stays as it is, sids is left alone."""
+    (tmp_path / "DATA").mkdir()
+    (tmp_path / "DATA" / "neu.sid").write_bytes(sid_bytes(1))
+    (tmp_path / "sids").mkdir()
+    (tmp_path / "sids" / "alt.sid").write_bytes(sid_bytes(1))
+
+    lib = SidLibrary(tmp_path)
+    lib.ensure_dirs()
+
+    assert (tmp_path / "DATA" / "neu.sid").is_file()
+    assert not (tmp_path / "DATA" / "alt.sid").exists()
+    assert (tmp_path / "sids" / "alt.sid").is_file()

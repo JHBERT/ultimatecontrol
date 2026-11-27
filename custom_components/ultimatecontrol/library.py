@@ -5,7 +5,7 @@ not already on the device has to be sent with the ``sidplay`` request. For a
 comfortable dashboard that means keeping the collection on the Home Assistant
 host:
 
-* ``<config>/ultimatecontrol/sids``  - the library, browsed folder by folder
+* ``<config>/ultimatecontrol/DATA``  - the library, browsed folder by folder
 * ``<config>/ultimatecontrol/favorites`` - favourites, copied out of the library
 
 Each SID's sub tune count and its HVSC song lengths are read from the files in
@@ -31,7 +31,10 @@ from .songlengths import (
 
 _LOGGER = logging.getLogger(__name__)
 
-LIBRARY_DIR = "sids"
+LIBRARY_DIR = "DATA"
+# Der frühere Name des Bibliotheksordners. Er wird beim Start einmalig
+# umbenannt, damit eine bestehende Sammlung nicht liegen bleibt.
+LEGACY_LIBRARY_DIR = "sids"
 FAVORITES_DIR = "favorites"
 
 # The HVSC allows every character a C64 file name allows; a media source folder
@@ -95,8 +98,28 @@ class SidLibrary:
     # ------------------------------------------------------------------
     def ensure_dirs(self) -> None:
         """Create the library and favourites folders."""
+        self.migrate_dirs()
         self.library_dir.mkdir(parents=True, exist_ok=True)
         self.favorites_dir.mkdir(parents=True, exist_ok=True)
+
+    def migrate_dirs(self) -> bool:
+        """Rename the old ``sids`` folder to ``DATA``.
+
+        Returns True when something was moved. An existing ``DATA`` wins: the
+        old folder is then left untouched instead of being merged into it.
+        """
+        legacy = self.base_dir / LEGACY_LIBRARY_DIR
+        if not legacy.is_dir() or self.library_dir.exists():
+            return False
+        try:
+            legacy.rename(self.library_dir)
+        except OSError as err:  # pragma: no cover - only on a locked folder
+            _LOGGER.warning(
+                "Could not rename %s to %s: %s", legacy, self.library_dir, err
+            )
+            return False
+        _LOGGER.info("Library folder renamed from %s to %s", legacy, self.library_dir)
+        return True
 
     def library_path(self, relative: str) -> Path:
         """Return the file system path of a library file."""
