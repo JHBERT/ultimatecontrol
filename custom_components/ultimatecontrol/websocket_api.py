@@ -26,6 +26,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import UltimateApiError, UltimateConnectionError
+from .csdb import FRONT_URL
 from .const import CONF_HOST, CONF_PORT, DEFAULT_PORT, DOMAIN
 from .library import SidLibrary, SidLibraryError
 from .runtime_data import UltimateControlRuntimeData
@@ -131,6 +132,10 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_playlist_add)
     websocket_api.async_register_command(hass, ws_playlist_edit)
     websocket_api.async_register_command(hass, ws_playlist_play)
+    websocket_api.async_register_command(hass, ws_csdb_front)
+    websocket_api.async_register_command(hass, ws_csdb_list)
+    websocket_api.async_register_command(hass, ws_csdb_release)
+    websocket_api.async_register_command(hass, ws_csdb_install)
     hass.http.register_view(UltimateSidView(hass))
 
 
@@ -1161,3 +1166,225 @@ async def ws_playlist_play(
         return
     notify_queue(runtime)
     connection.send_result(msg["id"], state.as_dict())
+
+
+# ----------------------------------------------------------------------
+# CSDb (csdb.dk)
+# ----------------------------------------------------------------------
+# The card shows the two tables of the CSDb front page and, behind a click,
+# one release. The webservice has no search, so the lists come from the HTML
+# pages and a single release from the XML webservice by its id.
+
+_CSDB_CACHE: Any = None
+
+
+def _csdb_cache() -> Any:
+    """One cache for the whole integration, so every card shares the fetches."""
+    global _CSDB_CACHE
+    if _CSDB_CACHE is None:
+        from .csdb import CsdbCache
+
+        _CSDB_CACHE = CsdbCache()
+    return _CSDB_CACHE
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/csdb_front",
+        vol.Optional("refresh", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_csdb_front(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """The latest releases and the top demos of the CSDb front page."""
+    from .csdb import CsdbError, async_fetch_text, parse_front
+
+    cache = _csdb_cache()
+    cached = None if msg["refresh"] else cache.get("front")
+    if cached is not None:
+        connection.send_result(msg["id"], {**cached, "cached": True})
+        return
+    try:
+        page = await async_fetch_text(async_get_clientsession(hass), FRONT_URL)
+    except CsdbError as err:
+        connection.send_error(msg["id"], "csdb_error", str(err))
+        return
+    tables = parse_front(page)
+    result = {
+        "latest": [entry.as_dict() for entry in tables["latest"]],
+        "top_demos": [entry.as_dict() for entry in tables["top_demos"]],
+    }
+    cache.put("front", result)
+    connection.send_result(msg["id"], {**result, "cached": False})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/csdb_list",
+        vol.Required("list"): vol.In(("latest", "top_demos")),
+        vol.Optional("limit", default=0): int,
+        vol.Optional("refresh", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_csdb_list(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """The full list behind a front page table: 25 latest releases or the chart."""
+    from .csdb import (
+        LATEST_URL,
+        TOP_DEMOS_URL,
+        CsdbError,
+        async_fetch_text,
+        parse_latest,
+        parse_top,
+    )
+
+    cache = _csdb_cache()
+    key = f"list:{msg['list']}"
+    entries = None if msg["refresh"] else cache.get(key)
+    if entries is None:
+        url = LATEST_URL if msg["list"] == "latest" else TOP_DEMOS_URL
+        try:
+            page = await async_fetch_text(async_get_clientsession(hass), url)
+        except CsdbError as err:
+            connection.send_error(msg["id"], "csdb_error", str(err))
+            return
+        entries = parse_latest(page) if msg["list"] == "latest" else parse_top(page)
+        cache.put(key, entries)
+    limit = msg["limit"]
+    shown = entries[:limit] if limit and limit > 0 else entries
+    connection.send_result(
+        msg["id"],
+        {
+            "list": msg["list"],
+            "total": len(entries),
+            "entries": [entry.as_dict() for entry in shown],
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/csdb_release",
+        vol.Required("id"): int,
+        vol.Optional("refresh", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_csdb_release(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """One release with everything its CSDb page shows."""
+    from .csdb import RELEASE_URL, CsdbError, async_fetch_text, parse_release
+
+    cache = _csdb_cache()
+    key = f"release:{msg['id']}"
+    cached = None if msg["refresh"] else cache.get(key)
+    if cached is not None:
+        connection.send_result(msg["id"], cached)
+        return
+    try:
+        xml = await async_fetch_text(
+            async_get_clientsession(hass), RELEASE_URL.format(release_id=msg["id"])
+        )
+        release = parse_release(xml)
+    except CsdbError as err:
+        connection.send_error(msg["id"], "csdb_error", str(err))
+        return
+    result = release.as_dict()
+    cache.put(key, result)
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/csdb_install",
+        vol.Required("entry_id"): str,
+        vol.Required("id"): int,
+        vol.Optional("download", default=0): int,
+        vol.Optional("subfolder", default=""): str,
+        vol.Optional("overwrite", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_csdb_install(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Download a release's archive into the library and unpack its images.
+
+    CSDb hands out ZIP archives with disks, programs and cartridges inside. The
+    archive lands in ``<library>/csdb/<release>/``; every image found in it is
+    unpacked next to it, so the card can start it like any other library file.
+    """
+    from .csdb import RELEASE_URL, CsdbError, async_fetch_text, parse_release
+
+    runtime = _runtime(hass, msg["entry_id"])
+    library = _library(runtime)
+    try:
+        xml = await async_fetch_text(
+            async_get_clientsession(hass), RELEASE_URL.format(release_id=msg["id"])
+        )
+        release = parse_release(xml)
+    except CsdbError as err:
+        connection.send_error(msg["id"], "csdb_error", str(err))
+        return
+    if not release.downloads:
+        connection.send_error(msg["id"], "no_download", "This release has no download")
+        return
+    index = msg["download"]
+    if index < 0 or index >= len(release.downloads):
+        connection.send_error(msg["id"], "no_download", f"No download {index}")
+        return
+    link = release.downloads[index]
+
+    try:
+        async with asyncio.timeout(60):
+            async with async_get_clientsession(hass).get(
+                link["url"],
+                headers={"User-Agent": "Mozilla/5.0 (compatible; UltimateControl)"},
+            ) as resp:
+                if resp.status != 200:
+                    connection.send_error(
+                        msg["id"],
+                        "download_failed",
+                        f"HTTP {resp.status} for {link['url']}",
+                    )
+                    return
+                data = await resp.read()
+    except (TimeoutError, asyncio.TimeoutError):
+        connection.send_error(msg["id"], "download_failed", "The download timed out")
+        return
+    except Exception as err:  # noqa: BLE001 - aiohttp, DNS, TLS
+        connection.send_error(msg["id"], "download_failed", str(err))
+        return
+
+    def _install() -> dict[str, Any]:
+        from .csdb import unpack_images
+
+        folder = f"csdb/{release.id}"
+        target = library.library_dir / folder
+        target.mkdir(parents=True, exist_ok=True)
+        (target / link["name"]).write_bytes(data)
+        images = unpack_images(data, target, overwrite=msg["overwrite"])
+        return {
+            "folder": folder,
+            "archive": link["name"],
+            "images": [f"{folder}/{name}" for name in images],
+        }
+
+    try:
+        result = await hass.async_add_executor_job(_install)
+    except Exception as err:  # noqa: BLE001 - a broken archive, a full disk
+        connection.send_error(msg["id"], "unpack_failed", str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "release": release.id,
+            "name": release.name,
+            **result,
+        },
+    )

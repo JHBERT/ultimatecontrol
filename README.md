@@ -262,6 +262,26 @@ nicht, steht in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Kurz:
 **kein fremder Code im Repository**, keine mitgelieferten Fremdbibliotheken,
 keine HVSC-Daten im Paket.
 
+## CSDb (csdb.dk)
+
+Der Tab **CSDb** in der Karte zeigt die zwei Tabellen der CSDb-Startseite:
+**Latest Releases** und **Top Demos**, jeweils mit den ersten fünf Einträgen.
+Ein Klick auf die Überschrift öffnet die ganze Liste (25 Releases bzw. der
+komplette Demo-Chart), ein Klick auf einen Eintrag die Seite der Demo mit Typ,
+Datum, Gruppe, Event und Platzierung, Rating, Credits, verwendeten SIDs,
+Download-Links und den neuesten Kommentaren. Oben links führt **‹ Zurück**
+jeweils eine Ebene zurück.
+
+Ein Download lässt sich direkt in die Bibliothek entpacken
+(`<config>/ultimatecontrol/sids/csdb/<Release-ID>/`) und von dort starten; die
+Websocket-Befehle heißen `ultimatecontrol/csdb_front`, `csdb_list`,
+`csdb_release` und `csdb_install`. Die Listen werden fünf Minuten
+zwischengespeichert, damit ein Dashboard-Refresh CSDb nicht belastet.
+
+CSDb hat keinen Such-Webservice, nur den Abruf einer einzelnen ID; die Listen
+kommen deshalb aus dem HTML der Seiten, eine Demo aus
+`/webservice/?type=release&id=<ID>&depth=2`.
+
 ## Danksagung
 
 Danke an **Gideon Zweijtzer** für die 1541 Ultimate und die Ultimate 64 und für

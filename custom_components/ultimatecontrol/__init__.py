@@ -51,7 +51,7 @@ CONF_FOLDER = "folder"
 CONF_SUBFOLDER = "subfolder"
 
 # The dashboard card; served as a module so a dashboard needs no file copy.
-PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.6.4"
+PANEL_URL = "/ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.0"
 
 # Optional file name of the HVSC song length database inside the cache folder.
 # The raw ``Songlengths.md5`` is parsed, the JSON file (built with

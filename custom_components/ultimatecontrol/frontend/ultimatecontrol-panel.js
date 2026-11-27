@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.6.4
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -144,6 +144,12 @@ class UltimateControlPanel extends HTMLElement {
     this._playlists = [];
     this._playlist = null;
     this._playlistView = false;
+    // CSDb: die zwei Tabellen der Startseite und eine geöffnete Demo.
+    this._csdbView = false;
+    this._csdb = null;
+    this._csdbList = null;
+    this._csdbRelease = null;
+    this._csdbBusy = false;
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
@@ -961,6 +967,27 @@ class UltimateControlPanel extends HTMLElement {
       return;
     }
 
+    if (this._csdbView) {
+      this.shadowRoot.innerHTML = this._csdbHtml();
+      const root = this.shadowRoot;
+      const back = root.querySelector("#csdbBack");
+      if (back) back.addEventListener("click", () => this._csdbBack());
+      root.querySelectorAll("[data-csdb-list]").forEach((el) =>
+        el.addEventListener("click", () => this._csdbOpenList(el.dataset.csdbList))
+      );
+      root.querySelectorAll("[data-csdb-id]").forEach((el) =>
+        el.addEventListener("click", () => this._csdbOpenRelease(Number(el.dataset.csdbId)))
+      );
+      root.querySelectorAll("[data-csdb-dl]").forEach((el) =>
+        el.addEventListener("click", () => this._csdbInstall(Number(el.dataset.csdbDl)))
+      );
+      root.querySelectorAll("[data-csdb-start]").forEach((el) =>
+        el.addEventListener("click", () => this._csdbStart(el.dataset.csdbStart))
+      );
+      this._restoreScroll(false);
+      return;
+    }
+
     if (this._playlistView) {
       const list = this._playlist;
       const items = list ? list.items || [] : [];
@@ -1252,6 +1279,8 @@ class UltimateControlPanel extends HTMLElement {
             <button data-playlists="1" title="Playlists ansehen">Playlists${
               this._playlists && this._playlists.length ? ` (${this._playlists.length})` : ""
             }</button>
+            <button data-csdb="1" class="${this._csdbView ? "on" : ""}"
+                    title="Demos von CSDb (csdb.dk)">CSDb</button>
             <button data-import="1" title="SID-Ordner vom Home-Assistant-Rechner importieren">＋</button>
           </div>
         </div>
@@ -1310,6 +1339,14 @@ class UltimateControlPanel extends HTMLElement {
     if (unfav) unfav.addEventListener("click", () => this._unfavorite());
     // Position halten: nach einem Klick auf einen Tune nicht nach oben springen.
     this._restoreScroll(false);
+    const csdbTab = root.querySelector("[data-csdb]");
+    if (csdbTab)
+      csdbTab.addEventListener("click", () => {
+        this._csdbView = true;
+        this._csdbList = null;
+        this._csdbRelease = null;
+        this._csdbLoad();
+      });
     const imp = root.querySelector("[data-import]");
     if (imp) imp.addEventListener("click", () => this._openImport());
     const topl = root.querySelector("#topl");
@@ -1356,6 +1393,245 @@ class UltimateControlPanel extends HTMLElement {
         cur.source === this._view.source && cur.path === key
       );
     });
+  }
+
+
+  /* ---------------------------------------------------------------- CSDb */
+
+  async _csdbLoad(refresh) {
+    this._csdbBusy = true;
+    this._render();
+    try {
+      this._csdb = await this._ws("csdb_front", { refresh: !!refresh });
+      this._error = null;
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
+    this._csdbBusy = false;
+    this._render();
+  }
+
+  async _csdbOpenList(list) {
+    this._csdbBusy = true;
+    this._csdbList = { list, entries: [] };
+    this._render();
+    try {
+      this._csdbList = await this._ws("csdb_list", { list });
+      this._error = null;
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
+    this._csdbBusy = false;
+    this._render();
+  }
+
+  async _csdbOpenRelease(id) {
+    this._csdbBusy = true;
+    this._csdbRelease = { id, loading: true };
+    this._render();
+    try {
+      this._csdbRelease = await this._ws("csdb_release", { id });
+      this._error = null;
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._csdbRelease = null;
+    }
+    this._csdbBusy = false;
+    this._render();
+  }
+
+  _csdbBack() {
+    if (this._csdbRelease) {
+      this._csdbRelease = null;
+    } else if (this._csdbList) {
+      this._csdbList = null;
+    } else {
+      this._csdbView = false;
+    }
+    this._render();
+  }
+
+  async _csdbInstall(index) {
+    if (!this._csdbRelease || this._csdbBusy) return;
+    this._csdbBusy = true;
+    this._error = null;
+    this._render();
+    try {
+      const result = await this._ws("csdb_install", {
+        id: this._csdbRelease.id,
+        download: index,
+        overwrite: true,
+      });
+      this._flash = `${result.images.length} Datei(en) nach ${result.folder} entpackt`;
+      this._csdbRelease = { ...this._csdbRelease, images: result.images, folder: result.folder };
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
+    this._csdbBusy = false;
+    this._render();
+  }
+
+  _csdbStart(path) {
+    const name = String(path).split("/").pop();
+    this._startImage({ name, kind: String(name).split(".").pop().toLowerCase(), path });
+  }
+
+  _csdbRow(entry, list) {
+    const bits = [];
+    if (entry.type) bits.push(this._esc(entry.type));
+    if (entry.group) bits.push(this._esc(entry.group));
+    if (entry.date) bits.push(this._esc(entry.date));
+    if (entry.rating) bits.push(`★ ${this._esc(entry.rating)}`);
+    return `<div class="row file" data-csdb-id="${entry.id}">
+      <span class="icon">${list === "top_demos" ? "🏆" : "📄"}</span>
+      <span class="name">${this._esc(entry.name)}</span>
+      <span class="len">${bits.join(" · ")}</span>
+    </div>`;
+  }
+
+  _csdbHtml() {
+    const rel = this._csdbRelease;
+    if (rel) return this._csdbReleaseHtml(rel);
+    if (this._csdbList) {
+      const entries = this._csdbList.entries || [];
+      const title = this._csdbList.list === "top_demos" ? "Top Demos" : "Latest Releases";
+      const rows = entries
+        .map((entry) => this._csdbRow(entry, this._csdbList.list))
+        .join("");
+      return this._csdbShell(
+        title,
+        `<div class="list" id="list">${
+          rows || `<div class="empty">${this._csdbBusy ? "Lade …" : "Keine Einträge."}</div>`
+        }</div>`
+      );
+    }
+    const front = this._csdb || { latest: [], top_demos: [] };
+    const table = (title, list, entries) => `
+      <div class="csdbHead">
+        <button class="csdbTitle" data-csdb-list="${list}" title="Ganze Liste zeigen">
+          ${title} ›
+        </button>
+      </div>
+      <div class="list" id="list">${
+        entries.length
+          ? entries.slice(0, 5).map((entry) => this._csdbRow(entry, list)).join("")
+          : `<div class="empty">${this._csdbBusy ? "Lade …" : "Nichts geladen."}</div>`
+      }</div>`;
+    return this._csdbShell(
+      "CSDb",
+      `${table("Latest Releases", "latest", front.latest || [])}
+       ${table("Top Demos", "top_demos", front.top_demos || [])}
+       <div class="hint">Daten von <a href="https://csdb.dk" target="_blank" rel="noreferrer">csdb.dk</a></div>`
+    );
+  }
+
+  _csdbShell(title, body) {
+    return `
+      <style>
+        :host { display:block; }
+        ha-card { padding: 12px 14px 14px; }
+        .head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+        .title { font-size:1.05rem; font-weight:600; flex:1; }
+        .back { font:inherit; font-size:.8rem; padding:4px 12px; border-radius:14px;
+                border:1px solid var(--divider-color,#444); background:transparent;
+                color: var(--primary-text-color,#eee); cursor:pointer; }
+        .csdbHead { display:flex; align-items:center; gap:8px; margin:10px 0 2px; }
+        .csdbTitle { font:inherit; font-size:.85rem; font-weight:600; padding:0;
+                     border:0; background:transparent; color: var(--primary-color,#03a9f4);
+                     cursor:pointer; }
+        .list { max-height: 300px; overflow-y:auto; }
+        .row { display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:6px;
+               cursor:pointer; font-size:.9rem; }
+        .row:hover { background: rgba(127,127,127,.12); }
+        .row .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .len { font-size:.72rem; color: var(--secondary-text-color,#999); }
+        .empty, .hint { font-size:.8rem; color: var(--secondary-text-color,#888); padding:8px 4px; }
+        .hint a { color: var(--primary-color,#03a9f4); }
+        .msg { font-size:.8rem; margin-top:6px; }
+        .msg.err { color: var(--error-color,#f44336); }
+        .msg.ok { color: var(--success-color,#4caf50); }
+        .meta { font-size:.82rem; color: var(--secondary-text-color,#bbb); margin:2px 0 8px; }
+        .shot { max-width:100%; border-radius:8px; margin:6px 0; display:block; }
+        .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+        .actions button { font:inherit; font-size:.82rem; padding:5px 12px; border-radius:14px;
+                          border:1px solid var(--divider-color,#444); background:transparent;
+                          color: var(--primary-text-color,#eee); cursor:pointer; }
+        .actions button.primary { background: var(--primary-color,#03a9f4);
+                                  border-color:transparent; color:#fff; }
+        .actions button:disabled { opacity:.45; cursor:default; }
+        .credits { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+        .credits .credit { font-size:.75rem; padding:2px 8px; border-radius:10px;
+                           background:rgba(127,127,127,.18); }
+        .comment { font-size:.78rem; margin-top:6px; padding:6px 8px; border-radius:8px;
+                   background:rgba(127,127,127,.1); }
+        .comment b { font-weight:600; }
+      </style>
+      <ha-card>
+        <div class="head">
+          <div class="title">${this._esc(title)}</div>
+          <button class="back" id="csdbBack">‹ Zurück</button>
+        </div>
+        ${body}
+        ${this._flash ? `<div class="msg ok">${this._esc(this._flash)}</div>` : ""}
+        ${this._error ? `<div class="msg err">${this._esc(this._error)}</div>` : ""}
+      </ha-card>`;
+  }
+
+  _csdbReleaseHtml(rel) {
+    if (rel.loading) return this._csdbShell("Demo", `<div class="empty">Lade …</div>`);
+    const meta = [];
+    if (rel.type) meta.push(this._esc(rel.type));
+    if (rel.date) meta.push(this._esc(rel.date));
+    if (rel.groups && rel.groups.length) meta.push(this._esc(rel.groups.join(", ")));
+    if (rel.event) meta.push(this._esc(rel.event) + (rel.place ? ` · Platz ${rel.place}` : ""));
+    else if (rel.place) meta.push(`Platz ${rel.place}`);
+    if (rel.rating) meta.push(`★ ${this._esc(rel.rating)}`);
+    const credits = (rel.credits || [])
+      .map(
+        (credit) =>
+          `<span class="credit">${this._esc(credit.role)}: ${this._esc(credit.handle)}</span>`
+      )
+      .join("");
+    const downloads = (rel.downloads || [])
+      .map(
+        (item, index) =>
+          `<button data-csdb-dl="${index}" ${this._csdbBusy ? "disabled" : ""}
+             title="${this._esc(item.url)}">⤓ ${this._esc(item.name)} (${item.downloads})</button>`
+      )
+      .join("");
+    const images = (rel.images || [])
+      .map(
+        (path) =>
+          `<button data-csdb-start="${this._esc(path)}" title="Auf dem C64 starten">
+             ▶ ${this._esc(String(path).split("/").pop())}</button>`
+      )
+      .join("");
+    const comments = (rel.comments || [])
+      .slice(0, 5)
+      .map(
+        (comment) =>
+          `<div class="comment"><b>${this._esc(comment.user || "?")}</b>
+             <span class="len">${this._esc(comment.date || "")}</span><br>
+             ${this._esc(comment.text)}</div>`
+      )
+      .join("");
+    const shot = rel.screenshot
+      ? `<img class="shot" src="${this._esc(rel.screenshot)}" alt="">`
+      : "";
+    return this._csdbShell(
+      rel.name,
+      `<div class="meta">${meta.join(" · ")}</div>
+       ${shot}
+       ${credits ? `<div class="credits">${credits}</div>` : ""}
+       ${
+         downloads || images
+           ? `<div class="actions">${images}${downloads}</div>`
+           : `<div class="hint">Kein Download hinterlegt.</div>`
+       }
+       ${comments}
+       <div class="hint"><a href="${this._esc(rel.url)}" target="_blank" rel="noreferrer">
+         Auf csdb.dk öffnen</a></div>`
+    );
   }
 
   /* Scrollposition sichern - ein neues innerHTML setzt sie sonst auf 0, und
