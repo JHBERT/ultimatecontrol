@@ -119,6 +119,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_import)
     websocket_api.async_register_command(hass, ws_host_folders)
     websocket_api.async_register_command(hass, ws_play)
+    websocket_api.async_register_command(hass, ws_image_play)
     websocket_api.async_register_command(hass, ws_current)
     websocket_api.async_register_command(hass, ws_hvsc_status)
     websocket_api.async_register_command(hass, ws_hvsc_download_songlengths)
@@ -402,6 +403,87 @@ async def ws_host_folders(
 # ----------------------------------------------------------------------
 # playing
 # ----------------------------------------------------------------------
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/image_play",
+        vol.Required("entry_id"): str,
+        vol.Required("path"): str,
+        vol.Optional("source", default="library"): vol.In(("library", "favorites")),
+        vol.Optional("drive", default="a"): vol.In(("a", "b")),
+        vol.Optional("mode", default="readonly"): vol.In(
+            ("readonly", "readwrite", "unlinked")
+        ),
+    }
+)
+@websocket_api.async_response
+async def ws_image_play(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start a disk image, program or cartridge from the library on the device.
+
+    A disk image is uploaded and mounted (``POST /v1/drives/<drive>:mount``
+    takes the image as the request body); PRG and CRT go through the runners,
+    which also accept an attachment. Nothing has to be copied to the Ultimate
+    beforehand.
+    """
+    from .const import DISK_EXTENSIONS
+
+    runtime = _runtime(hass, msg["entry_id"])
+    library = _library(runtime)
+    try:
+        path = await hass.async_add_executor_job(library.find, msg["source"], msg["path"])
+    except SidLibraryError as err:
+        connection.send_error(msg["id"], "not_found", str(err))
+        return
+    suffix = path.suffix.lower()
+    try:
+        data = await hass.async_add_executor_job(path.read_bytes)
+    except OSError as err:
+        connection.send_error(msg["id"], "not_found", str(err))
+        return
+    try:
+        if suffix in DISK_EXTENSIONS:
+            await runtime.api.async_mount_drive(
+                drive=msg["drive"],
+                image_bytes=data,
+                mode=msg["mode"],
+                image_type=suffix.lstrip("."),
+            )
+            action = "mount"
+        elif suffix == ".prg":
+            await runtime.api.async_run_prg_bytes(data)
+            action = "run_prg"
+        elif suffix == ".crt":
+            await runtime.api.async_run_crt_bytes(data)
+            action = "run_crt"
+        else:
+            connection.send_error(
+                msg["id"],
+                "invalid_format",
+                f"{path.name} is not a disk image, PRG or CRT",
+            )
+            return
+    except UltimateApiError as err:
+        connection.send_error(msg["id"], "device_error", str(err))
+        return
+    runtime.last_played = {
+        "source": msg["source"],
+        "path": msg["path"],
+        "name": path.name,
+        "kind": suffix.lstrip("."),
+        "action": action,
+    }
+    connection.send_result(
+        msg["id"],
+        {
+            "path": msg["path"],
+            "name": path.name,
+            "kind": suffix.lstrip("."),
+            "action": action,
+        },
+    )
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/play",

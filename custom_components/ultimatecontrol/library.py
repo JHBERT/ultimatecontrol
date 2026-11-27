@@ -38,6 +38,10 @@ FAVORITES_DIR = "favorites"
 # name must not climb out of the library.
 _FORBIDDEN = re.compile(r"[/\\\x00-\x1f]")
 
+# Images, die die Karte zeigt. SID bleibt die Hauptsache; Disketten-Images
+# laufen über den Runner, Programme und Cartridges ebenfalls.
+IMAGE_EXTENSIONS = {".sid", ".d64", ".d71", ".d81", ".g64", ".g71", ".prg", ".crt"}
+
 
 class SidLibraryError(Exception):
     """A path or name in the library is not acceptable."""
@@ -122,13 +126,30 @@ class SidLibrary:
             if child.is_dir():
                 entries.append({"name": child.name, "is_dir": True})
                 continue
-            if child.suffix.lower() != ".sid":
+            suffix = child.suffix.lower()
+            if suffix not in IMAGE_EXTENSIONS:
+                continue
+            if suffix != ".sid":
+                # Diskette, Programm oder Cartridge: nur Name und Größe.
+                try:
+                    size = child.stat().st_size
+                except OSError:
+                    continue
+                entries.append(
+                    {
+                        "name": child.name,
+                        "is_dir": False,
+                        "kind": suffix.lstrip("."),
+                        "size": size,
+                    }
+                )
                 continue
             info = self.inspect(child)
             entries.append(
                 {
                     "name": child.name,
                     "is_dir": False,
+                    "kind": "sid",
                     "songs": info.songs,
                     "start_song": info.start_song,
                     "duration": info.duration,

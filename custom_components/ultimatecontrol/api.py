@@ -463,6 +463,26 @@ class UltimateApi:
             timeout=RUNNER_TIMEOUT,
         )
 
+    async def async_run_prg_bytes(self, data: bytes) -> None:
+        """Upload a PRG and run it (``POST /v1/runners:run_prg``)."""
+        await self._request(
+            "POST",
+            "/v1/runners:run_prg",
+            data=data,
+            content_type="application/octet-stream",
+            timeout=RUNNER_TIMEOUT,
+        )
+
+    async def async_run_crt_bytes(self, data: bytes) -> None:
+        """Upload a cartridge and start it (``POST /v1/runners:run_crt``)."""
+        await self._request(
+            "POST",
+            "/v1/runners:run_crt",
+            data=data,
+            content_type="application/octet-stream",
+            timeout=RUNNER_TIMEOUT,
+        )
+
     async def async_run_prg(self, file_path: str) -> None:
         """Reset the C64 and run a PRG that exists on the device."""
         await self._request(

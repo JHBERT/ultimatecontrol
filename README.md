@@ -201,6 +201,22 @@ The tests in `tests/` start a small aiohttp server that answers like an
 Ultimate device, so the API client, the request it builds and the song length
 parser are covered without hardware and without Home Assistant.
 
+## Disketten und Programme aus der Bibliothek (ab 1.3.0)
+
+Neben SIDs zeigt die Karte jetzt auch **D64/D71/D81/G64/G71**, **PRG** und
+**CRT** aus der Bibliothek. Ein Klick lädt die Datei hoch und startet sie:
+
+| Datei | Aufruf am Gerät |
+|---|---|
+| D64, D71, D81, G64, G71 | `POST /v1/drives/a:mount` mit dem Image als Rumpf (Modus `readonly`) |
+| PRG | `POST /v1/runners:run_prg` mit der Datei als Anhang |
+| CRT | `POST /v1/runners:run_crt` mit der Datei als Anhang |
+
+Es muss also nichts vorher per FTP auf das Ultimate kopiert werden. Der
+Websocket-Befehl heißt `ultimatecontrol/image_play` (`path`, `source`, optional
+`drive` und `mode`). Nach dem Einlegen bleibt das Laufwerk bestückt; der Start
+erfolgt wie beim C64 üblich von Hand (`LOAD"*",8,1`).
+
 ## Mehrere Geräte in einer Karte (ab 1.2.0)
 
 Sind mehrere Ultimates eingerichtet und die Karte hat **keine** `entry_id`,

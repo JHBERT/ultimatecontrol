@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.2.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.3.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -472,6 +472,11 @@ class UltimateControlPanel extends HTMLElement {
       this._load();
       return;
     }
+    // Diskette, Programm oder Cartridge: hochladen und starten.
+    if (entry.kind && entry.kind !== "sid") {
+      this._startImage(entry);
+      return;
+    }
     // SID mit mehreren Tunes: Tune-Auswahl aufklappen, sonst direkt spielen.
     if (entry.songs > 1) {
       const key = `${this._view.path}/${entry.name}`;
@@ -595,6 +600,36 @@ class UltimateControlPanel extends HTMLElement {
   }
 
   /* -------------------------------------------------- Import */
+  /* Diskette/PRG/CRT aus der Bibliothek aufs Gerät bringen und starten. */
+  async _startImage(entry) {
+    if (this._playing) return;
+    const key = `${this._view.path}/${entry.name}`;
+    this._playing = key;
+    this._error = null;
+    this._render();
+    try {
+      await this._ws("image_play", {
+        source: this._view.source,
+        path: key,
+      });
+      this._flash =
+        entry.kind === "d64" || entry.kind === "d71" || entry.kind === "d81"
+          ? `${entry.name} in Laufwerk A eingelegt`
+          : `${entry.name} gestartet`;
+      this._current = {
+        source: this._view.source,
+        path: key,
+        name: entry.name,
+        kind: entry.kind,
+      };
+    } catch (err) {
+      this._error = err.message || String(err);
+    } finally {
+      this._playing = null;
+      this._render();
+    }
+  }
+
   async _openImport() {
     this._import = { path: "", parent: null, entries: [], sidCount: null, busy: false };
     this._render();
@@ -821,9 +856,20 @@ class UltimateControlPanel extends HTMLElement {
             <span class="icon">📁</span><span class="name">${this._esc(entry.name)}</span>
           </div>`;
         }
+        const kind = entry.kind || "sid";
         const tunes =
-          entry.songs > 1 ? `<span class="badge">${entry.songs} Tunes</span>` : "";
-        const len = entry.duration ? `<span class="len">${this._fmtLength(entry.duration)}</span>` : "";
+          kind === "sid" && entry.songs > 1
+            ? `<span class="badge">${entry.songs} Tunes</span>`
+            : "";
+        const len =
+          kind === "sid"
+            ? entry.duration
+              ? `<span class="len">${this._fmtLength(entry.duration)}</span>`
+              : ""
+            : entry.size
+              ? `<span class="len">${Math.round(entry.size / 1024)} KB</span>`
+              : "";
+        const icon = { sid: "♪", d64: "💾", d71: "💾", d81: "💾", g64: "💾", g71: "💾", prg: "▶", crt: "🎮" }[kind] || "♪";
         const key = `${view.path}/${entry.name}`;
         const open = this._openTunes === key;
         let tuneRows = "";
@@ -850,7 +896,7 @@ class UltimateControlPanel extends HTMLElement {
           isCurrent ? "current" : ""
         }"
                      data-play="${this._esc(entry.name)}">
-            <span class="icon">${open ? "▾" : "♪"}</span>
+            <span class="icon">${open ? "▾" : icon}</span>
             <span class="name">${this._esc(entry.name)}</span>
             ${tunes}${len}
           </div>${tuneRows}`;
