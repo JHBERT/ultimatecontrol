@@ -269,7 +269,7 @@ die offene, gut dokumentierte REST-Schnittstelle
 (<https://1541u-documentation.readthedocs.io>) – ohne beides gäbe es diese
 Integration nicht.
 
-Danke an **Parifraktik** für die Arbeit am C64 und die Hilfsbereitschaft in der
+Danke an Christian „Peri Fractic“ Simpson für die Arbeit am C64 und die Hilfsbereitschaft in der
 Szene.
 
 Danke an das **Commodore-Team und die Community**, die diesen Computer seit über
