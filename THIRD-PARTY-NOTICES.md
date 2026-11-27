@@ -83,8 +83,8 @@ Dieses Projekt steht auf den Schultern anderer. Danken möchten wir ausdrücklic
   REST-Schnittstelle, die so gut dokumentiert ist, dass man sie nachbauen kann
   (<https://1541u-documentation.readthedocs.io>). Ohne diese Hardware und diese
   Dokumentation gäbe es UltimateControl nicht.
-- **Parifraktik** – für die Arbeit am und mit dem C64 und für die Hilfsbereitschaft
-  in der Szene.
+- **Christian „Peri Fractic“ Simpson** – für die Arbeit am und mit dem C64 und für
+  die Hilfsbereitschaft in der Szene.
 - **Dem Commodore-Team und der Community** – dafür, dass der C64 seit über
   vierzig Jahren lebt: Hardware, Software, Wissen, Geduld und Freude an einer
   Maschine, die längst fertig war.
