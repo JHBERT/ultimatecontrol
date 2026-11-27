@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.3
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.7.4
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -484,20 +484,29 @@ class UltimateControlPanel extends HTMLElement {
       return;
     }
     // SID mit mehreren Tunes: Tune-Auswahl aufklappen, sonst direkt spielen.
+    // Auf- und Zuklappen arbeiten im DOM, ohne die Karte neu zu bauen: ein
+    // neues innerHTML setzt die Scrollposition der Liste auf 0, und die Liste
+    // sprang bei mehrteiligen SIDs nach oben ins Menü.
     if (entry.songs > 1) {
       const key = `${this._view.path}/${entry.name}`;
-      this._openTunes = this._openTunes === key ? null : key;
-      if (this._openTunes === key) {
-        try {
-          this._detail = await this._ws("inspect", {
-            source: this._view.source,
-            path: key,
-          });
-        } catch (err) {
-          this._error = err.message || String(err);
-        }
+      const open = this._openTunes !== key;
+      this._openTunes = open ? key : null;
+      if (!open) {
+        this._removeTunes();
+        this._setIcon(entry.name, "♪");
+        return;
       }
-      this._render();
+      try {
+        this._detail = await this._ws("inspect", {
+          source: this._view.source,
+          path: key,
+        });
+        this._error = null;
+      } catch (err) {
+        this._error = err.message || String(err);
+      }
+      if (this._openTunes !== key) return;
+      if (!this._insertTunes(entry.name, key)) this._render();
       return;
     }
     this._play(entry.name, 1);
@@ -528,6 +537,60 @@ class UltimateControlPanel extends HTMLElement {
     this._markRows();
     this._markTunes();
     this._renderNow();
+  }
+
+  /* Die Tune-Knöpfe unter einer Zeile einfügen, ohne die Karte neu zu bauen.
+     Liefert false, wenn die Zeile nicht im DOM steht - dann baut der Aufrufer
+     die Karte wie bisher neu. */
+  _insertTunes(name, key) {
+    const root = this.shadowRoot;
+    if (!root) return false;
+    const row = root.querySelector(`.row.file[data-play="${CSS.escape(name)}"]`);
+    if (!row) return false;
+    const detail = this._detail;
+    if (!detail || detail.path !== key) return false;
+    this._removeTunes();
+    const lengths = detail.lengths || [];
+    const main = detail.start_song || 1;
+    const cur = this._current || {};
+    const playing =
+      cur.source === this._view.source && cur.path === key ? cur.song || 0 : 0;
+    let html = "";
+    for (let i = 1; i <= Math.min(detail.songs, 64); i += 1) {
+      const cls = i === playing ? "tune playing" : i === main ? "tune main" : "tune";
+      const mark = i === playing ? "▶ " : i === main ? "★ " : "";
+      const title = i === playing ? "läuft gerade" : i === main ? "Haupttune des SID" : "";
+      html += `<button class="${cls}" data-song="${i}" data-name="${this._esc(name)}"
+        title="${title}"><span class="mark">${mark}</span><b>${i}</b>${
+          lengths[i - 1] ? `<span class="len">${this._fmtLength(lengths[i - 1])}</span>` : ""
+        }</button>`;
+    }
+    row.insertAdjacentHTML("afterend", `<div class="tunes">${html}</div>`);
+    const tunes = row.nextElementSibling;
+    if (tunes) {
+      tunes.querySelectorAll(".tune").forEach((el) =>
+        el.addEventListener("click", (event) => {
+          event.stopPropagation();
+          this._play(el.dataset.name, Number(el.dataset.song));
+        })
+      );
+    }
+    this._setIcon(name, "▾");
+    return true;
+  }
+
+  _removeTunes() {
+    const root = this.shadowRoot;
+    if (!root) return;
+    root.querySelectorAll(".tunes").forEach((el) => el.remove());
+  }
+
+  _setIcon(name, icon) {
+    const root = this.shadowRoot;
+    if (!root) return;
+    const row = root.querySelector(`.row.file[data-play="${CSS.escape(name)}"]`);
+    const el = row && row.querySelector(".icon");
+    if (el) el.textContent = icon;
   }
 
   /* Die Tune-Knöpfe des aufgeklappten SID in place markieren: der laufende
@@ -1436,7 +1499,8 @@ class UltimateControlPanel extends HTMLElement {
     let release = null;
     let error = null;
     try {
-      release = await this._ws("csdb_release", { id });
+      // Nicht "id": das Websocket setzt message.id selbst und überschreibt es.
+      release = await this._ws("csdb_release", { release: id });
     } catch (err) {
       error = err.message || String(err);
     }
@@ -1465,7 +1529,7 @@ class UltimateControlPanel extends HTMLElement {
     this._render();
     try {
       const result = await this._ws("csdb_install", {
-        id: this._csdbRelease.id,
+        release: this._csdbRelease.id,
         download: index,
         overwrite: true,
       });

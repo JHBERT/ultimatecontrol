@@ -1274,7 +1274,9 @@ async def ws_csdb_list(
     {
         vol.Required("type"): f"{DOMAIN}/csdb_release",
         vol.Optional("entry_id"): str,
-        vol.Required("id"): int,
+        # Nicht "id": Home Assistants Websocket setzt message.id selbst auf die
+        # laufende Befehlsnummer und überschreibt damit jeden Wert im Rumpf.
+        vol.Required("release"): int,
         vol.Optional("refresh", default=False): bool,
     }
 )
@@ -1286,14 +1288,14 @@ async def ws_csdb_release(
     from .csdb import RELEASE_URL, CsdbError, async_fetch_text, parse_release
 
     cache = _csdb_cache()
-    key = f"release:{msg['id']}"
+    key = f"release:{msg['release']}"
     cached = None if msg["refresh"] else cache.get(key)
     if cached is not None:
         connection.send_result(msg["id"], cached)
         return
     try:
         xml = await async_fetch_text(
-            async_get_clientsession(hass), RELEASE_URL.format(release_id=msg["id"])
+            async_get_clientsession(hass), RELEASE_URL.format(release_id=msg["release"])
         )
         release = parse_release(xml)
     except CsdbError as err:
@@ -1308,7 +1310,8 @@ async def ws_csdb_release(
     {
         vol.Required("type"): f"{DOMAIN}/csdb_install",
         vol.Required("entry_id"): str,
-        vol.Required("id"): int,
+        # Siehe csdb_release: "id" gehört dem Websocket selbst.
+        vol.Required("release"): int,
         vol.Optional("download", default=0): int,
         vol.Optional("subfolder", default=""): str,
         vol.Optional("overwrite", default=False): bool,
@@ -1337,7 +1340,7 @@ async def ws_csdb_install(
     library = _library(runtime)
     try:
         xml = await async_fetch_text(
-            async_get_clientsession(hass), RELEASE_URL.format(release_id=msg["id"])
+            async_get_clientsession(hass), RELEASE_URL.format(release_id=msg["release"])
         )
         release = parse_release(xml)
     except CsdbError as err:

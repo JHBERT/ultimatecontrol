@@ -74,3 +74,21 @@ def test_devices_is_the_only_command_without_entry_id():
     assert "entry_id" in schemas["ws_csdb_list"]
     assert "entry_id" in schemas["ws_csdb_release"]
     assert "entry_id" in schemas["ws_csdb_install"]
+
+
+def test_no_command_uses_id_as_a_body_key():
+    """``id`` belongs to the websocket itself.
+
+    ``sendMessagePromise`` sets ``message.id`` to the running command number
+    before sending, so a body key called ``id`` is overwritten: the handler then
+    reads the command number instead of the release the card meant. That is why
+    csdb_release opened the wrong release; the key is ``release`` now.
+    """
+    offenders = [name for name, keys in _schemas() if "id" in keys]
+    assert offenders == [], f"Befehl mit eigenem Schlüssel 'id': {offenders}"
+
+
+def test_the_csdb_commands_name_the_release_explicitly():
+    schemas = dict(_schemas())
+    assert "release" in schemas["ws_csdb_release"]
+    assert "release" in schemas["ws_csdb_install"]
