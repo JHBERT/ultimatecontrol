@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.6.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.6.1
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -500,7 +500,9 @@ class UltimateControlPanel extends HTMLElement {
   async _play(name, song, source, fullPath) {
     const path = fullPath || (this._view.path ? `${this._view.path}/${name}` : name);
     this._playing = path;
-    this._render();
+    // Nur die Zeile markieren, nicht die ganze Karte neu bauen: sonst springt
+    // die Liste nach oben.
+    this._markRows();
     try {
       this._current = await this._ws("play", {
         source: source || this._view.source,
@@ -512,6 +514,9 @@ class UltimateControlPanel extends HTMLElement {
       this._error = err.message || String(err);
     }
     this._playing = null;
+    // Die Zeile des gestarteten Tunes bleibt im Blick.
+    this._keep = path;
+    this._markRows();
     // Läuft ein Tune, die aufgeklappte Tune-Liste neu holen, damit der
     // laufende Tune grün markiert ist.
     if (this._openTunes) {
@@ -524,7 +529,27 @@ class UltimateControlPanel extends HTMLElement {
         /* Die Liste bleibt dann eben ohne Markierung. */
       }
     }
-    this._render();
+    // Ohne offene Tune-Liste genügt das Markieren - kein Neuaufbau, kein Sprung.
+    if (this._openTunes) {
+      this._render();
+    } else {
+      this._markRows();
+      this._renderNow();
+    }
+  }
+
+  /* Den "läuft gerade"-Text unten aktualisieren, ohne die Karte neu zu bauen. */
+  _renderNow() {
+    const root = this.shadowRoot;
+    if (!root) return;
+    const cur = this._current || {};
+    const el = root.querySelector(".nowText");
+    if (!el) return;
+    el.textContent = cur.name
+      ? `▶ ${cur.name}${cur.song && cur.songs ? ` · Tune ${cur.song}/${cur.songs}` : ""}${
+          cur.song_length ? ` · ${this._fmtLength(cur.song_length)}` : ""
+        }${cur.kind && cur.kind !== "sid" ? ` · ${String(cur.kind).toUpperCase()}` : ""}`
+      : "";
   }
 
   async _favorite() {
@@ -606,7 +631,7 @@ class UltimateControlPanel extends HTMLElement {
     const key = `${this._view.path}/${entry.name}`;
     this._playing = key;
     this._error = null;
-    this._render();
+    this._markRows();
     try {
       const result = await this._ws("image_play", {
         source: this._view.source,
@@ -626,10 +651,12 @@ class UltimateControlPanel extends HTMLElement {
         name: entry.name,
         kind: entry.kind,
       };
+      this._keep = key;
     } catch (err) {
       this._error = err.message || String(err);
     } finally {
       this._playing = null;
+      this._markRows();
       this._render();
     }
   }
@@ -1086,6 +1113,7 @@ class UltimateControlPanel extends HTMLElement {
       if (up) up.addEventListener("click", () => this._importGo(imp.parent || ""));
       root.querySelector("#impRun").addEventListener("click", () => this._importRun());
       root.querySelector("#impCancel").addEventListener("click", () => this._importClose());
+      this._restoreScroll(false);
       return;
     }
 
@@ -1295,25 +1323,60 @@ class UltimateControlPanel extends HTMLElement {
     if (qPlay) qPlay.addEventListener("click", () => this._queueAction("resume"));
   }
 
-  /* Scrollposition der Liste sichern - ein neues innerHTML setzt sie sonst
-     * auf 0, und die Ansicht springt nach jedem Klick nach oben. */
+  /* Zeilen ohne Neuaufbau markieren: "lädt gerade" und "läuft gerade".
+     Ein neues innerHTML würde die Scrollposition der Liste zurücksetzen. */
+  _keyOf(name) {
+    return this._view.path ? `${this._view.path}/${name}` : name;
+  }
+
+  _markRows() {
+    const root = this.shadowRoot;
+    if (!root) return;
+    const cur = this._current || {};
+    root.querySelectorAll(".row.file").forEach((el) => {
+      const key = this._keyOf(el.dataset.play);
+      el.classList.toggle("busy", this._playing === key);
+      el.classList.toggle(
+        "current",
+        cur.source === this._view.source && cur.path === key
+      );
+    });
+  }
+
+  /* Scrollposition sichern - ein neues innerHTML setzt sie sonst auf 0, und
+     die Ansicht springt nach jedem Klick nach oben. Gesichert wird die Liste
+     und die Seite, denn die Karte wird bei jedem Klick neu aufgebaut. */
   _rememberScroll() {
     const list = this.shadowRoot && this.shadowRoot.querySelector("#list");
     if (list) this._scroll = list.scrollTop;
+    this._pageScroll = window.scrollY || 0;
   }
 
-  /* Nach dem Neuaufbau: alte Position wiederherstellen oder den gerade
-   * gespielten Tune in den Blick holen. */
+  /* Nach dem Neuaufbau: alte Position wiederherstellen. Der aufgeklappte Tune
+     und der laufende Tune bleiben dabei im Blick. */
   _restoreScroll(keepTune) {
     const list = this.shadowRoot && this.shadowRoot.querySelector("#list");
-    if (!list) return;
-    const focus = keepTune ? list.querySelector(".row.file.current") : null;
-    if (focus) {
-      // Der laufende Tune bleibt sichtbar, auch wenn die Liste länger ist.
-      focus.scrollIntoView({ block: "nearest" });
+    const page = this._pageScroll || 0;
+    if (!list) {
+      window.scrollTo(0, page);
       return;
     }
     list.scrollTop = this._scroll || 0;
+    // Der Tune, dessen Untertunes offen sind, und der laufende Tune sollen
+    // sichtbar bleiben - sonst bleibt die Liste einfach stehen.
+    const open = this._openTunes
+      ? list.querySelector(`.row.file[data-play="${CSS.escape(this._openTunes.split("/").pop())}"]`)
+      : null;
+    const focus = keepTune ? list.querySelector(".row.file.current") : null;
+    const kept = this._keep
+      ? list.querySelector(
+          `.row.file[data-play="${CSS.escape(String(this._keep).split("/").pop())}"]`
+        )
+      : null;
+    const target = focus || kept || open;
+    if (target) target.scrollIntoView({ block: "nearest" });
+    // scrollIntoView kann auch die Seite mitscrollen: Position zurückholen.
+    window.scrollTo(0, page);
   }
 
   _esc(value) {
