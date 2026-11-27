@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.6.3
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.6.4
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -517,25 +517,37 @@ class UltimateControlPanel extends HTMLElement {
     // Die Zeile des gestarteten Tunes bleibt im Blick.
     this._keep = path;
     this._markRows();
-    // Läuft ein Tune, die aufgeklappte Tune-Liste neu holen, damit der
-    // laufende Tune grün markiert ist.
-    if (this._openTunes) {
-      try {
-        this._detail = await this._ws("inspect", {
-          source: this._view.source,
-          path: this._openTunes,
-        });
-      } catch (err) {
-        /* Die Liste bleibt dann eben ohne Markierung. */
-      }
-    }
-    // Ohne offene Tune-Liste genügt das Markieren - kein Neuaufbau, kein Sprung.
-    if (this._openTunes) {
-      this._render();
-    } else {
-      this._markRows();
-      this._renderNow();
-    }
+    // Nur markieren, nichts neu aufbauen: sonst springt die Liste nach oben -
+    // auch bei einem SID mit mehreren Tunes.
+    this._markRows();
+    this._markTunes();
+    this._renderNow();
+  }
+
+  /* Die Tune-Knöpfe des aufgeklappten SID in place markieren: der laufende
+     Tune grün, der Haupttune blau. Kein innerHTML, also kein Sprung. */
+  _markTunes() {
+    const root = this.shadowRoot;
+    if (!root || !this._openTunes) return false;
+    const name = String(this._openTunes).split("/").pop();
+    const row = root.querySelector(`.row.file[data-play="${CSS.escape(name)}"]`);
+    if (!row) return false;
+    const tunes = row.nextElementSibling;
+    if (!tunes || !tunes.classList || !tunes.classList.contains("tunes")) return false;
+    const cur = this._current || {};
+    const playing =
+      cur.source === this._view.source && cur.path === this._openTunes ? cur.song || 0 : 0;
+    const main = (this._detail && this._detail.start_song) || 1;
+    tunes.querySelectorAll(".tune").forEach((el) => {
+      const nr = Number(el.dataset.song);
+      const isPlaying = nr === playing;
+      el.classList.toggle("playing", isPlaying);
+      el.classList.toggle("main", !isPlaying && nr === main);
+      el.title = isPlaying ? "läuft gerade" : nr === main ? "Haupttune des SID" : "";
+      const mark = el.querySelector(".mark");
+      if (mark) mark.textContent = isPlaying ? "▶ " : nr === main ? "★ " : "";
+    });
+    return true;
   }
 
   /* Den "läuft gerade"-Text unten aktualisieren, ohne die Karte neu zu bauen. */
@@ -916,7 +928,9 @@ class UltimateControlPanel extends HTMLElement {
             const mark = i === playing ? "▶ " : i === main ? "★ " : "";
             html += `<button class="${cls}" data-song="${i}" data-name="${this._esc(entry.name)}"
               title="${i === playing ? "läuft gerade" : i === main ? "Haupttune des SID" : ""}">
-              ${mark}<b>${i}</b>${lengths[i - 1] ? `<span>${this._fmtLength(lengths[i - 1])}</span>` : ""}
+              <span class="mark">${mark}</span><b>${i}</b>${
+                lengths[i - 1] ? `<span class="len">${this._fmtLength(lengths[i - 1])}</span>` : ""
+              }
             </button>`;
           }
           tuneRows = `<div class="tunes">${html}</div>`;
@@ -1181,6 +1195,7 @@ class UltimateControlPanel extends HTMLElement {
                        border:1px solid var(--divider-color,#444); background:transparent;
                        color:var(--primary-text-color,#eee); cursor:pointer; }
         .tunes .tune span { opacity:.6; margin-left:4px; }
+        .tunes .tune .mark { opacity:1; margin-left:0; }
         /* Haupttune des SID: blau vorbelegt. */
         .tunes .tune.main { border-color: var(--primary-color,#03a9f4); color:#fff;
                             background: color-mix(in srgb, var(--primary-color,#03a9f4) 45%, transparent); }
