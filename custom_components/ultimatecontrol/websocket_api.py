@@ -1191,6 +1191,9 @@ def _csdb_cache() -> Any:
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/csdb_front",
+        # Die Karte schickt entry_id immer mit; ohne diesen Schlüssel lehnt
+        # Home Assistants Schema die Nachricht ab ("not a valid option").
+        vol.Optional("entry_id"): str,
         vol.Optional("refresh", default=False): bool,
     }
 )
@@ -1223,6 +1226,7 @@ async def ws_csdb_front(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/csdb_list",
+        vol.Optional("entry_id"): str,
         vol.Required("list"): vol.In(("latest", "top_demos")),
         vol.Optional("limit", default=0): int,
         vol.Optional("refresh", default=False): bool,
@@ -1269,6 +1273,7 @@ async def ws_csdb_list(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/csdb_release",
+        vol.Optional("entry_id"): str,
         vol.Required("id"): int,
         vol.Optional("refresh", default=False): bool,
     }
