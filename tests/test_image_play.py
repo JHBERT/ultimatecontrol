@@ -395,3 +395,54 @@ def test_keyboard_autostart_types_the_load_command():
     assert connection.result["action"] == "mount+type"
     assert typed == ["reset", 'LOAD"*",8,1']
     assert [c["path"] for c in api.calls] == ["/v1/drives/a:mount"]
+
+
+def test_method_none_only_mounts_the_next_disk():
+    """A multi part demo asks for the next disk: mounting is all it needs."""
+    module, _ = _module()
+    api = _Api()
+    typed = []
+
+    async def async_reset():
+        typed.append("reset")
+
+    async def async_type_text(text, enter=True):
+        typed.append(text)
+
+    api.async_reset = async_reset
+    api.async_type_text = async_type_text
+    runtime = types.SimpleNamespace(api=api, last_played=None)
+    hass = types.SimpleNamespace(
+        data={"ultimatecontrol": {"entry": runtime}},
+        async_add_executor_job=_executor,
+    )
+    connection = FakeConnection()
+    library = types.SimpleNamespace(
+        find=lambda source, path: _temp_d64(),
+        library_dir=Path("/tmp"),
+        favorites_dir=Path("/tmp"),
+    )
+    module._runtime = lambda hass, entry_id: runtime
+    module._library = lambda runtime: library
+
+    asyncio.run(
+        module.ws_image_play(
+            hass,
+            connection,
+            {
+                "id": 4,
+                "entry_id": "e",
+                "path": "DEMOS/DEMO2.D64",
+                "source": "library",
+                "drive": "a",
+                "mode": "readonly",
+                "autostart": True,
+                "autostart_method": "none",
+            },
+        )
+    )
+
+    assert connection.error is None
+    assert connection.result["action"] == "mount"
+    assert typed == []
+    assert [c["path"] for c in api.calls] == ["/v1/drives/a:mount"]

@@ -234,6 +234,14 @@ Verzeichnis hier nicht lesbar ist. Der Befehl lässt sich mit `load_command`
 überschreiben (z. B. `LOAD"DEMO",8,1`). In der Karte schaltet
 `autostart_method: keyboard|prg` um; Standard ist `prg`.
 
+### Mehrteilige Demos: nur einlegen (ab 1.6.0)
+
+`autostart_method: none` legt die Diskette ein und startet nichts. Genau das
+brauchen Demos mit mehreren Parts: das laufende Demo fordert die nächste Diskette
+an, und der Wechsel ist nur ein Mount – kein Reset, kein `LOAD`. In der Karte
+lässt sich das über die Konfiguration einstellen, per Websocket mit
+`autostart_method: "none"`.
+
 ## Mehrere Geräte in einer Karte (ab 1.2.0)
 
 Sind mehrere Ultimates eingerichtet und die Karte hat **keine** `entry_id`,

@@ -414,7 +414,9 @@ async def ws_host_folders(
             ("readonly", "readwrite", "unlinked")
         ),
         vol.Optional("autostart", default=False): bool,
-        vol.Optional("autostart_method", default="prg"): vol.In(("prg", "keyboard")),
+        vol.Optional("autostart_method", default="prg"): vol.In(
+            ("prg", "keyboard", "none")
+        ),
         vol.Optional("load_command"): str,
     }
 )
@@ -435,7 +437,9 @@ async def ws_image_play(
     ``run_prg``, which loads and runs it in one go. ``keyboard`` resets the
     machine and types ``LOAD"*",8,1`` plus RETURN into the KERNAL keyboard
     buffer over ``writemem`` - that is the classic way, and it also works for
-    an image whose directory cannot be read here.
+    an image whose directory cannot be read here. ``none`` only mounts, which
+    is what a multi part demo wants: the running demo asks for the next disk
+    and the drive just has to carry it.
     """
     from .const import DISK_EXTENSIONS
     from .d64 import D64Error, D64Image
@@ -465,7 +469,11 @@ async def ws_image_play(
                 image_type=suffix.lstrip("."),
             )
             action = "mount"
-            if msg["autostart"] and suffix in (".d64", ".d71"):
+            if (
+                msg["autostart"]
+                and msg.get("autostart_method", "prg") != "none"
+                and suffix in (".d64", ".d71")
+            ):
                 if msg.get("autostart_method", "prg") == "keyboard":
                     command = msg.get("load_command") or load_command()
                     await runtime.api.async_reset()

@@ -4,7 +4,7 @@
  * Die Integration liefert diese Datei unter
  *   /ultimatecontrol_panel/ultimatecontrol-panel.js
  * aus; als Dashboard-Ressource (Typ: JavaScript-Modul) eintragen:
- *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.5.0
+ *   /ultimatecontrol_panel/ultimatecontrol-panel.js?version=1.6.0
  *
  * type: custom:ultimatecontrol-panel
  * entry_id: <ID des Geräts>          (Einstellungen → Geräte → Ultimate)
@@ -1109,7 +1109,9 @@ class UltimateControlPanel extends HTMLElement {
            }
            <span class="nowText">▶ ${this._esc(cur.name)}${
              cur.song && cur.songs ? ` · Tune ${cur.song}/${cur.songs}` : ""
-           }${cur.song_length ? ` · ${this._fmtLength(cur.song_length)}` : ""}</span>
+           }${cur.song_length ? ` · ${this._fmtLength(cur.song_length)}` : ""}${
+             cur.kind && cur.kind !== "sid" ? ` · ${this._esc(cur.kind.toUpperCase())}` : ""
+           }</span>
          </div>`
       : "";
 
